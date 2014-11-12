@@ -161,6 +161,8 @@ void read_incoming_link (struct context *c);
  */
 void process_incoming_link (struct context *c);
 
+bool process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bool floated);
+void process_incoming_link_part2 (struct context *c, struct link_socket_info *lsi, const uint8_t *orig_buf);
 
 /**
  * Write a packet to the external network interface.

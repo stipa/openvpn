@@ -34,6 +34,7 @@
 
 #include "multi.h"
 #include "forward-inline.h"
+#include "ssl_verify.h"
 
 #include "memdbg.h"
 
@@ -44,7 +45,7 @@
  */
 
 struct multi_instance *
-multi_get_create_instance_udp (struct multi_context *m)
+multi_get_create_instance_udp (struct multi_context *m, bool *floated)
 {
   struct gc_arena gc = gc_new ();
   struct mroute_addr real;
@@ -56,14 +57,33 @@ multi_get_create_instance_udp (struct multi_context *m)
       struct hash_element *he;
       const uint32_t hv = hash_value (hash, &real);
       struct hash_bucket *bucket = hash_bucket (hash, hv);
-  
-      he = hash_lookup_fast (hash, bucket, &real, hv);
+      uint8_t* ptr = BPTR(&m->top.c2.buf);
+      uint8_t op = ptr[0] >> P_OPCODE_SHIFT;
+      int key_id = ptr[0] & P_KEY_ID_MASK;
+      uint32_t peer_id;
+      bool hmac_mismatch = false;
+      int i;
 
-      if (he)
+      /* make sure buffer has enough length to read peer-id */
+      if (op == P_DATA_V2 && m->top.c2.buf.len >= sizeof(uint32_t))
 	{
-	  mi = (struct multi_instance *) he->value;
+	  peer_id = ntohl((*(uint32_t*)ptr)) & 0xFFFFFF;
+	  if ((peer_id < m->max_clients) && (m->instances[peer_id]))
+	    {
+	      mi = m->instances[peer_id];
+
+	      *floated = !link_socket_actual_match(&mi->context.c2.from, &m->top.c2.from);
+	    }
 	}
       else
+	{
+	  he = hash_lookup_fast (hash, bucket, &real, hv);
+	  if (he)
+	    {
+	      mi = (struct multi_instance *) he->value;
+	    }
+	}
+      if (!mi && !hmac_mismatch)
 	{
 	  if (!m->top.c2.tls_auth_standalone
 	      || tls_pre_decrypt_lite (m->top.c2.tls_auth_standalone, &m->top.c2.from, &m->top.c2.buf))
@@ -75,6 +95,17 @@ multi_get_create_instance_udp (struct multi_context *m)
 		    {
 		      hash_add_fast (hash, bucket, &mi->real, hv, mi);
 		      mi->did_real_hash = true;
+
+		      int i;
+		      for (i = 0; i < m->max_clients; ++ i)
+			{
+			  if (!m->instances[i])
+			    {
+			      mi->context.c2.tls_multi->peer_id = i;
+			      m->instances[i] = mi;
+			      break;
+			    }
+			}
 		    }
 		}
 	      else
@@ -89,15 +120,8 @@ multi_get_create_instance_udp (struct multi_context *m)
 #ifdef ENABLE_DEBUG
       if (check_debug_level (D_MULTI_DEBUG))
 	{
-	  const char *status;
+	  const char *status = mi ? "[ok]" : "[failed]";
 
-	  if (he && mi)
-	    status = "[succeeded]";
-	  else if (!he && mi)
-	    status = "[created]";
-	  else
-	    status = "[failed]";
-	
 	  dmsg (D_MULTI_DEBUG, "GET INST BY REAL: %s %s",
 	       mroute_addr_print (&real, &gc),
 	       status);
