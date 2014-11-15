@@ -34,7 +34,6 @@
 
 #include "multi.h"
 #include "forward-inline.h"
-#include "ssl_verify.h"
 
 #include "memdbg.h"
 
@@ -59,15 +58,13 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
       struct hash_bucket *bucket = hash_bucket (hash, hv);
       uint8_t* ptr = BPTR(&m->top.c2.buf);
       uint8_t op = ptr[0] >> P_OPCODE_SHIFT;
-      int key_id = ptr[0] & P_KEY_ID_MASK;
       uint32_t peer_id;
-      bool hmac_mismatch = false;
       int i;
 
-      /* make sure buffer has enough length to read peer-id */
-      if (op == P_DATA_V2 && m->top.c2.buf.len >= sizeof(uint32_t))
+      /* make sure buffer has enough length to read opcode (1 byte) and peer-id (3 bytes) */
+      if (op == P_DATA_V2 && m->top.c2.buf.len >= (1 + 3))
 	{
-	  peer_id = ntohl((*(uint32_t*)ptr)) & 0xFFFFFF;
+	  peer_id = ntohl(*(uint32_t*)ptr) & 0xFFFFFF;
 	  if ((peer_id < m->max_clients) && (m->instances[peer_id]))
 	    {
 	      mi = m->instances[peer_id];
@@ -83,7 +80,7 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
 	      mi = (struct multi_instance *) he->value;
 	    }
 	}
-      if (!mi && !hmac_mismatch)
+      if (!mi)
 	{
 	  if (!m->top.c2.tls_auth_standalone
 	      || tls_pre_decrypt_lite (m->top.c2.tls_auth_standalone, &m->top.c2.from, &m->top.c2.buf))
@@ -96,8 +93,7 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
 		      hash_add_fast (hash, bucket, &mi->real, hv, mi);
 		      mi->did_real_hash = true;
 
-		      int i;
-		      for (i = 0; i < m->max_clients; ++ i)
+		      for (i = 0; i < m->max_clients; ++i)
 			{
 			  if (!m->instances[i])
 			    {

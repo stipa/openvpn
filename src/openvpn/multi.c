@@ -2106,15 +2106,22 @@ multi_process_post (struct multi_context *m, struct multi_instance *mi, const un
   return ret;
 }
 
+/**
+ * Handles peer floating.
+ *
+ * If peer is floated to a taken address, either drops packet
+ * (if peer that owns address has different CN) or disconnects
+ * existing peer. Updates multi_instance with new address,
+ * updates hashtables in multi_context.
+ */
 void multi_process_float (struct multi_context* m, struct multi_instance* mi)
 {
   struct mroute_addr real;
   struct hash *hash = m->hash;
+  struct gc_arena gc = gc_new ();
 
   if (!mroute_extract_openvpn_sockaddr (&real, &m->top.c2.from.dest, true))
-    return;
-
-  struct gc_arena gc = gc_new ();
+    goto done;
 
   const uint32_t hv = hash_value (hash, &real);
   struct hash_bucket *bucket = hash_bucket (hash, hv);
@@ -2128,13 +2135,12 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
       const char *ex_cn = tls_common_name (ex_mi->context.c2.tls_multi, true);
       if (cn && ex_cn && strcmp (cn, ex_cn))
 	{
-	  msg (D_MULTI_MEDIUM, "tried to float to %s", 
+	  msg (D_MULTI_MEDIUM, "prevent float to %s",
 		multi_instance_string (ex_mi, false, &gc));
-	  gc_free (&gc);
 
 	  mi->context.c2.buf.len = 0;
 
-	  return;
+	  goto done;
 	}
 
       msg (D_MULTI_MEDIUM, "closing instance %s", multi_instance_string (ex_mi, false, &gc));
@@ -2158,7 +2164,6 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
     mi->context.c2.link_socket = m->top.c2.link_socket;
     mi->context.c2.link_socket_info->lsa->actual = m->top.c2.from;
 
-    /* fix remote_addr in tls structure */
     tls_update_remote_addr (mi->context.c2.tls_multi, &mi->context.c2.from);
 
     ASSERT (hash_add (m->hash, &mi->real, mi, false));
@@ -2169,6 +2174,7 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
     hash_add (m->cid_hash, &mi->context.c2.mda_context.cid, mi, false);
 #endif
 
+done:
     gc_free (&gc);
 }
 
@@ -2187,6 +2193,9 @@ multi_process_incoming_link (struct multi_context *m, struct multi_instance *ins
   struct multi_instance *mi;
   bool ret = true;
   bool floated = false;
+  bool ok;
+  struct link_socket_info *lsi;
+  const uint8_t *orig_buf;
 
   if (m->pending)
     return true;
@@ -2223,9 +2232,9 @@ multi_process_incoming_link (struct multi_context *m, struct multi_instance *ins
 	  /* decrypt in instance context */
 
 	  perf_push (PERF_PROC_IN_LINK);
-	  struct link_socket_info *lsi = get_link_socket_info (c);
-	  const uint8_t *orig_buf = c->c2.buf.data;
-	  bool ok = process_incoming_link_part1(c, lsi, floated);
+	  lsi = get_link_socket_info (c);
+	  orig_buf = c->c2.buf.data;
+	  ok = process_incoming_link_part1(c, lsi, floated);
 
 #ifdef ENABLE_CRYPTO
 	  if (ok)

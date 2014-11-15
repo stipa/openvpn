@@ -3493,9 +3493,14 @@ tls_rec_payload (struct tls_multi *multi,
   return ret;
 }
 
-/* Update the remote_addr, needed if a client floats. */
+/**
+ * Updates remote address in TLS sessions.
+ *
+ * @param multi	Tunnel to update
+ * @param addr new address
+ */
 void
-tls_update_remote_addr (struct tls_multi *multi, const struct link_socket_actual *from)
+tls_update_remote_addr (struct tls_multi *multi, const struct link_socket_actual *addr)
 {
   struct gc_arena gc = gc_new ();
   int i, j;
@@ -3504,19 +3509,19 @@ tls_update_remote_addr (struct tls_multi *multi, const struct link_socket_actual
     {
       struct tls_session *session = &multi->session[i];
 
-      for (j = 0; j < KEY_SCAN_SIZE; ++j) 
-        {
-          struct key_state *ks = &session->key[j];
+      for (j = 0; j < KEY_SCAN_SIZE; ++j)
+	{
+	  struct key_state *ks = &session->key[j];
 
-          if (!link_socket_actual_defined(&ks->remote_addr) || 
-                link_socket_actual_match (from, &ks->remote_addr))
-            continue;
+	  if (!link_socket_actual_defined(&ks->remote_addr) || 
+		link_socket_actual_match (addr, &ks->remote_addr))
+	    continue;
 
 	  dmsg (D_TLS_KEYSELECT, "TLS: tls_update_remote_addr from IP=%s to IP=%s",
 	       print_link_socket_actual (&ks->remote_addr, &gc),
-	       print_link_socket_actual (from, &gc));
+	       print_link_socket_actual (addr, &gc));
 
-	  ks->remote_addr = *from;
+	  ks->remote_addr = *addr;
 	}
     }
   gc_free (&gc);

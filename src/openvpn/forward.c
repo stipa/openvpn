@@ -816,14 +816,6 @@ process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bo
 #endif
 #endif /* ENABLE_SSL */
 
-      /*
-       * Good, non-zero length packet received.
-       * Commence multi-stage processing of packet,
-       * such as authenticate, decrypt, decompress.
-       * If any stage fails, it sets buf.len to 0 or -1,
-       * telling downstream stages to ignore the packet.
-       */
-       
       /* authenticate and decrypt the incoming packet */
       decrypt_status = openvpn_decrypt (&c->c2.buf, c->c2.buffers->decrypt_buf, &c->c2.crypto_options, &c->c2.frame);
 
