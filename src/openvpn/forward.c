@@ -824,6 +824,8 @@ process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bo
 	  register_signal (c, SIGUSR1, "decryption-error"); /* SOFT-SIGUSR1 -- decryption error in TCP mode */
 	  msg (D_STREAM_ERRORS, "Fatal decryption error (process_incoming_link), restarting");
 	}
+#else /* ENABLE_CRYPTO */
+      decrypt_status = true;
 #endif /* ENABLE_CRYPTO */
     }
   else
