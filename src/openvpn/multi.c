@@ -39,6 +39,7 @@
 #include "gremlin.h"
 #include "mstats.h"
 #include "ssl_verify.h"
+#include <inttypes.h>
 
 #include "memdbg.h"
 
@@ -2139,9 +2140,6 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
       multi_close_instance(m, ex_mi, false);
     }
 
-    msg(D_MULTI_MEDIUM, "peer %d float to %s", mi->context.c2.tls_multi->peer_id, 
-	print_link_socket_actual (&m->top.c2.from, &gc));
-
     ASSERT (hash_remove(m->hash, &mi->real));
     ASSERT (hash_remove(m->iter, &mi->real));
 
@@ -2165,6 +2163,9 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
     hash_remove (m->cid_hash, &mi->context.c2.mda_context.cid);
     hash_add (m->cid_hash, &mi->context.c2.mda_context.cid, mi, false);
 #endif
+
+    msg (D_MULTI_MEDIUM, "peer %" PRIu32 " floated to %s", mi->context.c2.tls_multi->peer_id, 
+	print_link_socket_actual (&m->top.c2.from, &gc));
 
 done:
     gc_free (&gc);

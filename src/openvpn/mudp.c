@@ -33,6 +33,7 @@
 #if P2MP_SERVER
 
 #include "multi.h"
+#include <inttypes.h>
 #include "forward-inline.h"
 
 #include "memdbg.h"
@@ -70,6 +71,14 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
 	      mi = m->instances[peer_id];
 
 	      *floated = !link_socket_actual_match(&mi->context.c2.from, &m->top.c2.from);
+
+	      if (*floated)
+	      {
+	      	/* reset prefix, since here we are not sure peer is the one it claims to be */
+		ungenerate_prefix(mi);
+		msg (D_MULTI_ERRORS, "Untrusted peer %" PRIu32 " wants to float to %s", peer_id,
+			mroute_addr_print (&real, &gc));
+	      }
 	    }
 	}
       else
