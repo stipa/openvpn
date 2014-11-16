@@ -435,10 +435,10 @@ bool tls_rec_payload (struct tls_multi *multi,
 /**
  * Updates remote address in TLS sessions.
  *
- * @param multi	Tunnel to update
- * @param addr new address
+ * @param multi - Tunnel to update
+ * @param addr - new address
  */
-void tls_update_remote_addr (struct tls_multi *multi,
+void tls_update_remote_addr (struct tls_multi *multi, 
 			     const struct link_socket_actual *addr);
 
 #ifdef MANAGEMENT_DEF_AUTH

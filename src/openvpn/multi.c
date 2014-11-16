@@ -2106,14 +2106,6 @@ multi_process_post (struct multi_context *m, struct multi_instance *mi, const un
   return ret;
 }
 
-/**
- * Handles peer floating.
- *
- * If peer is floated to a taken address, either drops packet
- * (if peer that owns address has different CN) or disconnects
- * existing peer. Updates multi_instance with new address,
- * updates hashtables in multi_context.
- */
 void multi_process_float (struct multi_context* m, struct multi_instance* mi)
 {
   struct mroute_addr real;
@@ -2193,10 +2185,7 @@ multi_process_incoming_link (struct multi_context *m, struct multi_instance *ins
   struct multi_instance *mi;
   bool ret = true;
   bool floated = false;
-  bool ok;
-  struct link_socket_info *lsi;
-  const uint8_t *orig_buf;
-
+  
   if (m->pending)
     return true;
 
@@ -2229,16 +2218,15 @@ multi_process_incoming_link (struct multi_context *m, struct multi_instance *ins
 
       if (BLEN (&c->c2.buf) > 0)
 	{
+	  struct link_socket_info *lsi;
+	  const uint8_t *orig_buf;
+
 	  /* decrypt in instance context */
 
 	  perf_push (PERF_PROC_IN_LINK);
 	  lsi = get_link_socket_info (c);
 	  orig_buf = c->c2.buf.data;
-	  ok = process_incoming_link_part1(c, lsi, floated);
-
-#ifdef ENABLE_CRYPTO
-	  if (ok)
-#endif /* ENABLE_CRYPTO */   
+	  if (process_incoming_link_part1(c, lsi, floated))
 	    {
 	      if (floated)
 		{

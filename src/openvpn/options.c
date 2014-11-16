@@ -3906,8 +3906,7 @@ apply_push_options (struct options *options,
 		    struct buffer *buf,
 		    unsigned int permission_mask,
 		    unsigned int *option_types_found,
-		    struct env_set *es,
-		    struct tls_multi *tls_multi)
+		    struct env_set *es)
 {
   char line[OPTION_PARM_SIZE];
   int line_num = 0;

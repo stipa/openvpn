@@ -3493,12 +3493,6 @@ tls_rec_payload (struct tls_multi *multi,
   return ret;
 }
 
-/**
- * Updates remote address in TLS sessions.
- *
- * @param multi	Tunnel to update
- * @param addr new address
- */
 void
 tls_update_remote_addr (struct tls_multi *multi, const struct link_socket_actual *addr)
 {

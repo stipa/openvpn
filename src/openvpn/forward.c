@@ -826,8 +826,8 @@ process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bo
 	  msg (D_STREAM_ERRORS, "Fatal decryption error (process_incoming_link), restarting");
 	}
       else
-	res = true;
 #endif /* ENABLE_CRYPTO */
+	res = true;
     }
   else
     {
