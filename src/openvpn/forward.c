@@ -727,7 +727,6 @@ process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bo
 {
   struct gc_arena gc = gc_new ();
   bool decrypt_status;
-  bool res = false;
 
   if (c->c2.buf.len > 0)
     {
@@ -825,9 +824,7 @@ process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bo
 	  register_signal (c, SIGUSR1, "decryption-error"); /* SOFT-SIGUSR1 -- decryption error in TCP mode */
 	  msg (D_STREAM_ERRORS, "Fatal decryption error (process_incoming_link), restarting");
 	}
-      else
 #endif /* ENABLE_CRYPTO */
-	res = true;
     }
   else
     {
@@ -835,7 +832,7 @@ process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bo
     }
   gc_free (&gc);
 
-  return res;
+  return decrypt_status;
 }
 
 void
