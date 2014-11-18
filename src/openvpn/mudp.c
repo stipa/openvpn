@@ -99,6 +99,7 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
 		  mi = multi_create_instance (m, &real);
 		  if (mi)
 		    {
+		      msg (D_MULTI_ERRORS, "add fast %s", mroute_addr_print (&mi->real, &gc));
 		      hash_add_fast (hash, bucket, &mi->real, hv, mi);
 		      mi->did_real_hash = true;
 

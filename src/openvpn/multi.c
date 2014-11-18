@@ -543,7 +543,10 @@ multi_close_instance (struct multi_context *m,
     {
       if (mi->did_real_hash)
 	{
+	  struct gc_arena gc = gc_new ();
+	  msg (D_MULTI_ERRORS, "remove %s", mroute_addr_print (&mi->real, &gc));
 	  ASSERT (hash_remove (m->hash, &mi->real));
+	  gc_free(&gc);
 	}
       if (mi->did_iter)
 	{
@@ -2140,6 +2143,7 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
       multi_close_instance(m, ex_mi, false);
     }
 
+    msg (D_MULTI_ERRORS, "remove %s", mroute_addr_print (&mi->real, &gc));
     ASSERT (hash_remove(m->hash, &mi->real));
     ASSERT (hash_remove(m->iter, &mi->real));
 
@@ -2156,6 +2160,7 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
 
     tls_update_remote_addr (mi->context.c2.tls_multi, &mi->context.c2.from);
 
+    msg (D_MULTI_ERRORS, "add %s", mroute_addr_print (&mi->real, &gc));
     ASSERT (hash_add (m->hash, &mi->real, mi, false));
     ASSERT (hash_add (m->iter, &mi->real, mi, false));
 
