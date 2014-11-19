@@ -726,7 +726,7 @@ bool
 process_incoming_link_part1 (struct context *c, struct link_socket_info *lsi, bool floated)
 {
   struct gc_arena gc = gc_new ();
-  bool decrypt_status;
+  bool decrypt_status = false;
 
   if (c->c2.buf.len > 0)
     {

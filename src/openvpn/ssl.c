@@ -3503,11 +3503,11 @@ tls_update_remote_addr (struct tls_multi *multi, const struct link_socket_actual
     {
       struct tls_session *session = &multi->session[i];
 
-      for (j = 0; j < KEY_SCAN_SIZE; ++j)
+      for (j = 0; j < KS_SIZE; ++j)
 	{
 	  struct key_state *ks = &session->key[j];
 
-	  if (!link_socket_actual_defined(&ks->remote_addr) || 
+	  if (!link_socket_actual_defined(&ks->remote_addr) ||
 		link_socket_actual_match (addr, &ks->remote_addr))
 	    continue;
 
