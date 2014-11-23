@@ -432,6 +432,12 @@ multi_route_defined (const struct multi_context *m,
 }
 
 /*
+ * Takes prefix away from multi_instance.
+ */
+void
+ungenerate_prefix (struct multi_instance *mi);
+
+/*
  * Set a msg() function prefix with our current client instance ID.
  */
 
