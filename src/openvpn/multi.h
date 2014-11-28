@@ -170,6 +170,11 @@ struct multi_context {
    * Timer object for stale route check
    */
   struct event_timeout stale_routes_check_et;
+
+#ifdef ENABLE_ASYNC_PUSH
+  /* mapping between inotify watch descriptors and multi_instances */
+  struct hash *inotify_watchers;
+#endif
 };
 
 /*
@@ -324,6 +329,11 @@ void multi_close_instance_on_signal (struct multi_context *m, struct multi_insta
 
 void init_management_callback_multi (struct multi_context *m);
 void uninit_management_callback_multi (struct multi_context *m);
+
+
+#ifdef ENABLE_ASYNC_PUSH
+void multi_process_file_closed (struct multi_context *m, const unsigned int mpp_flags);
+#endif
 
 /*
  * Return true if our output queue is not full
