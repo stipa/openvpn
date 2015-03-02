@@ -70,6 +70,11 @@
 #define OCC_EXIT               6
 
 /*
+ * Notifies clients that server is exiting/restarting
+ */
+#define OCC_SERVER_EXIT        7
+
+/*
  * Used to conduct a load test command sequence
  * of UDP connection for empirical MTU measurement.
  */

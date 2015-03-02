@@ -390,6 +390,13 @@ process_received_occ_msg (struct context *c)
       c->sig->signal_received = SIGTERM;
       c->sig->signal_text = "remote-exit";
       break;
+
+    case OCC_SERVER_EXIT:
+      msg (D_LOW, "RECEIVED OCC_SERVER_EXIT");
+      c->sig->signal_received = SIGUSR1;
+      c->sig->signal_text = "remote-server-exit";
+      c->options.no_advance = false;
+      break;
     }
   c->c2.buf.len = 0; /* don't pass packet on */
 }
