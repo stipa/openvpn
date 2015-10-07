@@ -592,6 +592,14 @@ multi_close_instance (struct multi_context *m,
 	}
 #endif
 
+#ifdef ENABLE_ASYNC_PUSH
+      if (mi->inotify_watch != -1)
+	{
+	  hash_remove(m->inotify_watchers, (void*) (unsigned long)mi->inotify_watch);
+	  mi->inotify_watch = -1;
+	}
+#endif
+
       m->instances[mi->context.c2.tls_multi->peer_id] = NULL;
 
       schedule_remove_entry (m->schedule, (struct schedule_entry *) mi);
@@ -753,7 +761,10 @@ multi_create_instance (struct multi_context *m, const struct mroute_addr *real)
 
   mi->context.c2.push_reply_deferred = true;
 
+#ifdef ENABLE_ASYNC_PUSH
   mi->context.c2.push_request_received = false;
+  mi->inotify_watch = -1;
+#endif
 
   if (!multi_process_post (m, mi, MPP_PRE_SELECT))
     {
@@ -1995,6 +2006,7 @@ multi_process_file_closed (struct multi_context *m, const unsigned int mpp_flags
 	  if (mi)
 	    {
 	      hash_remove(m->inotify_watchers, (void*) (unsigned long) pevent->wd);
+	      mi->inotify_watch = -1;
 	    }
 	}
       else
@@ -2167,12 +2179,12 @@ multi_process_post (struct multi_context *m, struct multi_instance *mi, const un
     {
 #ifdef ENABLE_ASYNC_PUSH
 #ifdef ENABLE_DEF_AUTH
-      bool was_deferred = false;
+      bool was_authenticated = false;
       struct key_state *ks = NULL;
       if (mi->context.c2.tls_multi)
         {
           ks = &mi->context.c2.tls_multi->session[TM_ACTIVE].key[KS_PRIMARY];
-          was_deferred = ks->auth_deferred;
+          was_authenticated = ks->authenticated;
         }
 #endif
 #endif
@@ -2183,13 +2195,18 @@ multi_process_post (struct multi_context *m, struct multi_instance *mi, const un
 
 #ifdef ENABLE_ASYNC_PUSH
 #ifdef ENABLE_DEF_AUTH
-      if (ks && ks->auth_control_file && ks->auth_deferred && !was_deferred)
+      if (ks && ks->auth_control_file && ks->auth_deferred && !was_authenticated)
 	{
 	  /* watch acf file */
 	  long wd = inotify_add_watch(m->top.c2.inotify_fd, ks->auth_control_file, IN_CLOSE_WRITE | IN_ONESHOT);
 	  if (wd >= 0)
 	    {
+	      if (mi->inotify_watch != -1)
+		{
+		  hash_remove(m->inotify_watchers, (void*) (unsigned long)mi->inotify_watch);
+	      	}
 	      hash_add (m->inotify_watchers, (const uintptr_t*)wd, mi, true);
+	      mi->inotify_watch = wd;
 	    }
 	  else
 	    {

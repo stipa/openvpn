@@ -415,7 +415,9 @@ process_incoming_push_request (struct context *c)
 {
   int ret = PUSH_MSG_ERROR;
 
+#ifdef ENABLE_ASYNC_PUSH
   c->c2.push_request_received = true;
+#endif
   if (tls_authentication_status (c->c2.tls_multi, 0) == TLS_AUTHENTICATION_FAILED || c->c2.context_auth == CAS_FAILED)
     {
       const char *client_reason = tls_client_reason (c->c2.tls_multi);

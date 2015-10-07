@@ -105,6 +105,10 @@ struct multi_instance {
 
   struct context context;       /**< The context structure storing state
                                  *   for this VPN tunnel. */
+
+#ifdef ENABLE_ASYNC_PUSH
+  int inotify_watch; /* watch descriptor for acf */
+#endif
 };
 
 
