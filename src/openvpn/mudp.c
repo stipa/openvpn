@@ -60,12 +60,16 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
       struct hash_bucket *bucket = hash_bucket (hash, hv);
       uint8_t* ptr = BPTR(&m->top.c2.buf);
       uint8_t op = ptr[0] >> P_OPCODE_SHIFT;
+      bool v2 = (op == P_DATA_V2) && (m->top.c2.buf.len >= (1 + 3));
+      bool peer_id_disabled = false;
 
       /* make sure buffer has enough length to read opcode (1 byte) and peer-id (3 bytes) */
-      if (op == P_DATA_V2 && m->top.c2.buf.len >= (1 + 3))
+      if (v2)
 	{
 	  uint32_t peer_id = ntohl(*(uint32_t*)ptr) & 0xFFFFFF;
-	  if ((peer_id < m->max_clients) && (m->instances[peer_id]))
+	  peer_id_disabled = (peer_id == 0xFFFFFF);
+
+	  if (!peer_id_disabled && (peer_id < m->max_clients) && (m->instances[peer_id]))
 	    {
 	      mi = m->instances[peer_id];
 
@@ -80,7 +84,7 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
 	      }
 	    }
 	}
-      else
+      if (!v2 || peer_id_disabled)
 	{
 	  he = hash_lookup_fast (hash, bucket, &real, hv);
 	  if (he)
@@ -102,6 +106,9 @@ multi_get_create_instance_udp (struct multi_context *m, bool *floated)
 
 		      hash_add_fast (hash, bucket, &mi->real, hv, mi);
 		      mi->did_real_hash = true;
+
+		      /* max_clients must be less then max peer-id value */
+		      ASSERT(m->max_clients < 0xFFFFFF);
 
 		      for (i = 0; i < m->max_clients; ++i)
 			{

@@ -5653,6 +5653,11 @@ add_option (struct options *options,
 	  msg (msglevel, "--max-clients must be at least 1");
 	  goto err;
 	}
+      if (max_clients >= 0xFFFFFF) /* max peer-id value */
+	{
+	  msg (msglevel, "--max-clients must be at less than 0xFFFFFF");
+	  goto err;
+	}
       options->max_clients = max_clients;
     }
   else if (streq (p[0], "max-routes-per-client") && p[1] && !p[2])
