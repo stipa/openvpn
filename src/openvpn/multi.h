@@ -338,6 +338,13 @@ void uninit_management_callback_multi (struct multi_context *m);
 
 
 #ifdef ENABLE_ASYNC_PUSH
+/**
+ * Called when inotify event is fired, which happens when acf file is closed or deleted.
+ * Continues authentication and sends push_repl
+ *
+ * @param m multi_context
+ * @param mpp_flags
+ */
 void multi_process_file_closed (struct multi_context *m, const unsigned int mpp_flags);
 #endif
 
