@@ -38,7 +38,7 @@
 
 #include "memdbg.h"
 
-#ifdef ENABLE_ASYNC_PUSH
+#ifdef HAVE_SYS_INOTIFY_H
 #include <sys/inotify.h>
 #endif
 

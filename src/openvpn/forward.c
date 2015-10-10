@@ -1372,7 +1372,7 @@ io_wait_dowork (struct context *c, const unsigned int flags)
   static int management_shift = 6; /* depends on MANAGEMENT_READ and MANAGEMENT_WRITE */
 #endif
 #ifdef ENABLE_ASYNC_PUSH
-  static int file_shift = 8;
+  static int file_shift = 8;       /* listening inotify events */
 #endif
 
   /*

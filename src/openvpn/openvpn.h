@@ -487,8 +487,7 @@ struct context_2
 #endif
 
 #ifdef ENABLE_ASYNC_PUSH
-  /* descriptor for monitoring file changes */
-  int inotify_fd;
+  int inotify_fd; /* descriptor for monitoring file changes */
 #endif
 };
 

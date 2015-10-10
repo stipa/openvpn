@@ -28,7 +28,7 @@
 #include "config-msvc.h"
 #endif
 
-#ifdef ENABLE_ASYNC_PUSH
+#ifdef HAVE_SYS_INOTIFY_H
 #include <sys/inotify.h>
 #define INOTIFY_EVENT_BUFFER_SIZE 16384
 #endif
@@ -250,6 +250,9 @@ cid_compare_function (const void *key1, const void *key2)
 
 #ifdef ENABLE_ASYNC_PUSH
 static uint32_t
+/*
+ * inotify watcher descriptors are used as hash value
+ */
 int_hash_function (const void *key, uint32_t iv)
 {
   return (unsigned long)key;
@@ -1970,6 +1973,10 @@ multi_connection_established (struct multi_context *m, struct multi_instance *mi
 }
 
 #ifdef ENABLE_ASYNC_PUSH
+/*
+ * Called when inotify event is fired, which happens when acf file is closed or deleted.
+ * Continues authentication and sends push_reply.
+ */
 void
 multi_process_file_closed (struct multi_context *m, const unsigned int mpp_flags)
 {
@@ -2177,8 +2184,7 @@ multi_process_post (struct multi_context *m, struct multi_instance *mi, const un
 
   if (!IS_SIG (&mi->context) && ((flags & MPP_PRE_SELECT) || ((flags & MPP_CONDITIONAL_PRE_SELECT) && !ANY_OUT (&mi->context))))
     {
-#ifdef ENABLE_ASYNC_PUSH
-#ifdef ENABLE_DEF_AUTH
+#if defined(ENABLE_ASYNC_PUSH) && defined(ENABLE_DEF_AUTH)
       bool was_authenticated = false;
       struct key_state *ks = NULL;
       if (mi->context.c2.tls_multi)
@@ -2187,33 +2193,30 @@ multi_process_post (struct multi_context *m, struct multi_instance *mi, const un
           was_authenticated = ks->authenticated;
         }
 #endif
-#endif
 
       /* figure timeouts and fetch possible outgoing
 	 to_link packets (such as ping or TLS control) */
       pre_select (&mi->context);
 
-#ifdef ENABLE_ASYNC_PUSH
-#ifdef ENABLE_DEF_AUTH
+#if defined(ENABLE_ASYNC_PUSH) && defined(ENABLE_DEF_AUTH)
       if (ks && ks->auth_control_file && ks->auth_deferred && !was_authenticated)
 	{
 	  /* watch acf file */
-	  long wd = inotify_add_watch(m->top.c2.inotify_fd, ks->auth_control_file, IN_CLOSE_WRITE | IN_ONESHOT);
-	  if (wd >= 0)
+	  long watch_descriptor = inotify_add_watch(m->top.c2.inotify_fd, ks->auth_control_file, IN_CLOSE_WRITE | IN_ONESHOT);
+	  if (watch_descriptor >= 0)
 	    {
 	      if (mi->inotify_watch != -1)
 		{
 		  hash_remove(m->inotify_watchers, (void*) (unsigned long)mi->inotify_watch);
 	      	}
-	      hash_add (m->inotify_watchers, (const uintptr_t*)wd, mi, true);
-	      mi->inotify_watch = wd;
+	      hash_add (m->inotify_watchers, (const uintptr_t*)watch_descriptor, mi, true);
+	      mi->inotify_watch = watch_descriptor;
 	    }
 	  else
 	    {
 	      msg(M_NONFATAL, "MULTI: inotify_add_watch error: %s", strerror(errno));
 	    }
 	}
-#endif
 #endif
 
       if (!IS_SIG (&mi->context))
