@@ -409,6 +409,7 @@ static const char usage_message[] =
   "                  execution.  Peer must specify --pull in its config file.\n"
   "--push-reset    : Don't inherit global push list for specific\n"
   "                  client instance.\n"
+  "--push-suppress-ipv6 : do not send IPv6 config to client instance.\n"
   "--ifconfig-pool start-IP end-IP [netmask] : Set aside a pool of subnets\n"
   "                  to be dynamically allocated to connecting clients.\n"
   "--ifconfig-pool-linear : Use individual addresses rather than /30 subnets\n"
@@ -5876,6 +5877,11 @@ add_option (struct options *options,
       options->push_ifconfig_ipv6_local = local;
       options->push_ifconfig_ipv6_netbits = netbits;
       options->push_ifconfig_ipv6_remote = remote;
+    }
+  else if (streq (p[0], "push-suppress-ipv6") && !p[1])
+    {
+      VERIFY_PERMISSION (OPT_P_INSTANCE);
+      options->push_suppress_ipv6 = true;
     }
   else if (streq (p[0], "disable") && !p[1])
     {

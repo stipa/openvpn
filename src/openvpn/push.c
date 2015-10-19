@@ -251,15 +251,22 @@ send_push_reply (struct context *c)
 
   if ( c->c2.push_ifconfig_ipv6_defined )
     {
-      /* IPv6 is put into buffer first, could be lengthy */
-      buf_printf( &buf, ",ifconfig-ipv6 %s/%d %s",
-		    print_in6_addr( c->c2.push_ifconfig_ipv6_local, 0, &gc),
-		    c->c2.push_ifconfig_ipv6_netbits,
-		    print_in6_addr( c->c2.push_ifconfig_ipv6_remote, 0, &gc) );
-      if (BLEN (&buf) >= safe_cap)
+      if ( c->options.push_suppress_ipv6 )
 	{
-	  msg (M_WARN, "--push ifconfig-ipv6 option is too long");
-	  goto fail;
+	  msg( M_INFO, "send_push_reply(): suppress sending ifconfig-ipv6" );
+	}
+      else
+	{
+	  /* IPv6 is put into buffer first, could be lengthy */
+	  buf_printf( &buf, ",ifconfig-ipv6 %s/%d %s",
+			print_in6_addr( c->c2.push_ifconfig_ipv6_local, 0, &gc),
+			c->c2.push_ifconfig_ipv6_netbits,
+			print_in6_addr( c->c2.push_ifconfig_ipv6_remote, 0, &gc) );
+	  if (BLEN (&buf) >= safe_cap)
+	    {
+	      msg (M_WARN, "--push ifconfig-ipv6 option is too long");
+	      goto fail;
+	    }
 	}
     }
 
@@ -268,6 +275,15 @@ send_push_reply (struct context *c)
       if (e->enable)
 	{
 	  const int l = strlen (e->option);
+
+	  if ( c->options.push_suppress_ipv6 &&
+		( strncmp( e->option, "tun-ipv6", 8 ) == 0 ||
+		  strncmp( e->option, "route-ipv6", 10 ) == 0 ) )
+	    {
+	      msg( M_INFO, "send_push_reply(): suppress sending '%s'", e->option );
+	      goto next;
+	    }
+
 	  if (BLEN (&buf) + l >= safe_cap)
 	    {
 	      buf_printf (&buf, ",push-continuation 2");
@@ -288,6 +304,7 @@ send_push_reply (struct context *c)
 	    }
 	  buf_printf (&buf, ",%s", e->option);
 	}
+next:
       e = e->next;
     }
 
