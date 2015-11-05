@@ -2110,12 +2110,13 @@ options_postprocess_verify_ce (const struct options *options, const struct conne
 #ifdef ENABLE_CRYPTO
 
   /*
-   * Check consistency of replay options
+   * Check consistency of replay options.
+   * Use nonfatal warning in case of config contains both UDP and TCP remotes.
    */
   if ((!proto_is_udp(ce->proto))
       && (options->replay_window != defaults.replay_window
 	  || options->replay_time != defaults.replay_time))
-    msg (M_USAGE, "--replay-window only makes sense with --proto udp");
+    msg (M_WARN, "--replay-window only makes sense with --proto udp");
 
   if (!options->replay
       && (options->replay_window != defaults.replay_window
