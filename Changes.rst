@@ -135,6 +135,8 @@ User-visible Changes
   ciphers configured in the config file.  Use --ncp-disable if you don't want
   that.
 
+- On the client side recursively routed packets, which have same destination as host,
+  are dropped. This could be disabled with --allow-recursive-routing option.
 
 Maintainer-visible changes
 --------------------------
