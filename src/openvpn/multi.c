@@ -2284,12 +2284,13 @@ void multi_process_float (struct multi_context* m, struct multi_instance* mi)
   struct mroute_addr real;
   struct hash *hash = m->hash;
   struct gc_arena gc = gc_new ();
+  struct hash_bucket *bucket;
+  const uint32_t hv = hash_value (hash, &real);
 
   if (!mroute_extract_openvpn_sockaddr (&real, &m->top.c2.from.dest, true))
     goto done;
 
-  const uint32_t hv = hash_value (hash, &real);
-  struct hash_bucket *bucket = hash_bucket (hash, hv);
+  bucket = hash_bucket (hash, hv);
 
   /* make sure that we don't float to an address taken by another client */
   struct hash_element *he = hash_lookup_fast (hash, bucket, &real, hv);

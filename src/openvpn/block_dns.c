@@ -26,6 +26,7 @@
 
 #ifdef WIN32
 
+#include <guiddef.h>
 #include <fwpmu.h>
 #include <initguid.h>
 #include <fwpmtypes.h>
@@ -33,6 +34,13 @@
 #include <ws2ipdef.h>
 #include <iphlpapi.h>
 #include "block_dns.h"
+
+/*
+ * Use __inline instead of inline for MSVC
+ */
+#ifdef _MSC_VER
+#define inline __inline
+#endif
 
 /*
  * WFP-related defines and GUIDs not in mingw32

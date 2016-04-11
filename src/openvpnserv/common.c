@@ -22,8 +22,9 @@
  *  59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <service.h>
-#include <validate.h>
+#include "service.h"
+#include "validate.h"
+
 /*
  * These are necessary due to certain buggy implementations of (v)snprintf,
  * that don't guarantee null termination for size > 0.

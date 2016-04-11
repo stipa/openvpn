@@ -216,6 +216,9 @@
     <ClCompile Include="comp-lz4.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="block_dns.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base64.h">
@@ -462,6 +465,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="win32.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="compstub.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="block_dns.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

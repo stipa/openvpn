@@ -82,6 +82,9 @@
     <ClCompile Include="compat-lz4.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="compat-lz4.h" />
+    <ClInclude Include="compat-stdbool.h" />
+    <ClInclude Include="compat-versionhelpers.h" />
     <ClInclude Include="compat.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

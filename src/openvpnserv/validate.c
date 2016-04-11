@@ -28,6 +28,8 @@
 #include <shlwapi.h>
 #include <lm.h>
 
+#include "win32.h"
+
 static const WCHAR *white_list[] =
     {
        L"auth-retry",

@@ -50,6 +50,7 @@
 #endif
 
 #ifdef WIN32
+#include <netioapi.h>
 #include "openvpn-msg.h"
 
 #define METRIC_NOT_USED ((DWORD)-1)
@@ -2768,23 +2769,25 @@ do_route_ipv4_service (const bool add, const struct route_ipv4 *r, const struct 
   if (if_index == ~0)
     return false;
 
-  route_message_t msg = {
-    .header = {
-      (add ? msg_add_route : msg_del_route),
-      sizeof (route_message_t),
-      0 },
-    .family = AF_INET,
-    .prefix.ipv4.s_addr = htonl(r->network),
-    .gateway.ipv4.s_addr = htonl(r->gateway),
-    .iface = { .index = if_index, .name = "" },
-    .metric = (r->flags & RT_METRIC_DEFINED ? r->metric : -1)
-  };
+  {
+    route_message_t msg = {
+      .header = {
+        (add ? msg_add_route : msg_del_route),
+        sizeof (route_message_t),
+        0 },
+      .family = AF_INET,
+      .prefix.ipv4.s_addr = htonl(r->network),
+      .gateway.ipv4.s_addr = htonl(r->gateway),
+      .iface = { .index = if_index, .name = "" },
+      .metric = (r->flags & RT_METRIC_DEFINED ? r->metric : -1)
+    };
 
-  netmask_to_netbits (r->network, r->netmask, &msg.prefix_len);
-  if (msg.prefix_len == -1)
-    msg.prefix_len = 32;
+    netmask_to_netbits (r->network, r->netmask, &msg.prefix_len);
+    if (msg.prefix_len == -1)
+      msg.prefix_len = 32;
 
-  return do_route_service (add, &msg, sizeof (msg), tt->options.msg_channel);
+    return do_route_service (add, &msg, sizeof (msg), tt->options.msg_channel);
+   }
 }
 
 static bool
@@ -2797,12 +2800,12 @@ do_route_ipv6_service (const bool add, const struct route_ipv6 *r, const struct 
       sizeof (route_message_t),
       0 },
     .family = AF_INET6,
-    .prefix.ipv6 = r->network,
     .prefix_len = r->netbits,
-    .gateway.ipv6 = r->gateway,
     .iface = { .index = tt->adapter_index, .name = "" },
     .metric = ( (r->flags & RT_METRIC_DEFINED) ? r->metric : -1)
   };
+  msg.prefix.ipv6 = r->network;
+  msg.gateway.ipv6 = r->gateway;
 
   if ( r->adapter_index )		/* vpn server special route */
     msg.iface.index = r->adapter_index;

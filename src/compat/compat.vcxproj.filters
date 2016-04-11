@@ -41,5 +41,14 @@
     <ClInclude Include="compat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="compat-lz4.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="compat-stdbool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="compat-versionhelpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
