@@ -48,6 +48,8 @@
 #include "ping-inline.h"
 #include "mstats.h"
 
+#include <mqueue.h>
+
 counter_type link_read_bytes_global;  /* GLOBAL */
 counter_type link_write_bytes_global; /* GLOBAL */
 
@@ -1043,6 +1045,16 @@ process_incoming_tun (struct context *c)
   gc_free (&gc);
 }
 
+struct mq_packet {
+    uint32_t saddr;
+    uint32_t daddr;
+    unsigned short sport;
+    unsigned short dport;
+    unsigned short bytes;
+    bool outgoing;
+    uint8_t proto;
+};
+
 void
 process_ip_header (struct context *c, unsigned int flags, struct buffer *buf)
 {
@@ -1074,6 +1086,39 @@ process_ip_header (struct context *c, unsigned int flags, struct buffer *buf)
 	  struct buffer ipbuf = *buf;
 	  if (is_ipv4 (TUNNEL_TYPE (c->c1.tuntap), &ipbuf))
 	    {
+            bool out = flags & PIPV4_OUTGOING;
+            const struct openvpn_iphdr *pip = (struct openvpn_iphdr *) BPTR (buf);            
+            unsigned long sa = pip->saddr; 
+            unsigned long da = pip->daddr; 
+            uint16_t dport = 0, sport = 0;
+            if (pip->protocol == OPENVPN_IPPROTO_TCP) {
+                const struct openvpn_tcphdr* tcp = (const struct openvpn_tcphdr*) (BPTR (buf) + sizeof(struct openvpn_iphdr));
+                sport = ntohs(tcp->source);                    
+                dport = ntohs(tcp->dest);                    
+            } else if(pip->protocol == OPENVPN_IPPROTO_UDP) {
+                const struct openvpn_udphdr* udp = (const struct openvpn_udphdr*) (BPTR (buf) + sizeof(struct openvpn_iphdr));
+                sport = ntohs(udp->source);                    
+                dport = ntohs(udp->dest);                    
+            } 
+            struct mq_packet p;
+            memset(&p, 0, sizeof(p));
+
+            static mqd_t mq = -1;
+            if (mq == -1) {
+                mq = mq_open("/mq", O_WRONLY);
+            }
+            p.saddr = sa;
+            p.daddr = da;
+            p.sport = sport;
+            p.dport = dport;
+            p.outgoing = out;
+            p.bytes = ntohs(pip->tot_len);
+            p.proto = pip->protocol;
+            mq_send(mq, (const char*) &p, sizeof(struct mq_packet), 0);
+ 
+            // msg(M_INFO, "%s:%d      %d bytes", str, dport, ntohs(pip->tot_len));
+
+
 #if PASSTOS_CAPABILITY
 	      /* extract TOS from IP header */
 	      if (flags & PIPV4_PASSTOS)
