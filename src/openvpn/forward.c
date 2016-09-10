@@ -1105,7 +1105,8 @@ process_ip_header (struct context *c, unsigned int flags, struct buffer *buf)
 
             static mqd_t mq = -1;
             if (mq == -1) {
-                mq = mq_open("/mq", O_WRONLY);
+	        struct mq_attr attr;
+                mq = mq_open("/mq", O_WRONLY | O_CREAT, 0644, NULL);
             }
             p.saddr = sa;
             p.daddr = da;
