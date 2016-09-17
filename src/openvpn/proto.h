@@ -219,6 +219,38 @@ struct ip_tcp_udp_hdr {
                              - sizeof(struct openvpn_tcphdr))
 
 /*
+ * This returns an ip protocol version of packet inside tun.
+ */
+inline static int get_tun_ip_ver(int tunnel_type, struct buffer *buf)
+{
+  int offset;
+  int ip_ver;
+  const struct openvpn_iphdr *ih;
+
+  ip_ver = -1;
+
+  /* for tun get ip version from ip header */
+  if (tunnel_type == DEV_TYPE_TUN)
+    {
+      if (likely(BLEN (buf) >= (int) sizeof (struct openvpn_iphdr)))
+	{
+	  ip_ver = OPENVPN_IPH_GET_VER (*BPTR(buf));
+	}
+    }
+  else if (tunnel_type == DEV_TYPE_TAP)
+    {
+      /* for tap get ip version from eth header */
+      if (likely(BLEN (buf) >= (int)(sizeof (struct openvpn_ethhdr))))
+	{
+	  const struct openvpn_ethhdr *eh = (const struct openvpn_ethhdr *) BPTR (buf);
+	  return (ntohs (eh->proto) == OPENVPN_ETH_P_IPV6) ? 6 : 4;
+	}
+    }
+
+    return ip_ver;
+}
+
+/*
  * If raw tunnel packet is IPv4 or IPv6, return true and increment
  * buffer offset to start of IP header.
  */
