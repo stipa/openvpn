@@ -298,18 +298,39 @@ send_push_request (struct context *c)
 /**
  * Prepare push options, based on local options and available peer info.
  *
- * @param options	Connection options
+ * @param context	context structure storing data for VPN tunnel
  * @param gc     	gc arena for allocating push options
- * @param push_list     push list to where options are added
- * @param tls_multi	TLS state structure for the current tunnel
+ * @param push_list	push list to where options are added
  *
  * @return true on success, false on failure.
  */
 static bool
-prepare_push_reply (struct options *o, struct gc_arena *gc, struct push_list *push_list, struct tls_multi *tls_multi)
+prepare_push_reply (struct context *c, struct gc_arena *gc, struct push_list *push_list)
 {
   const char *optstr = NULL;
+  const struct tls_multi *tls_multi = c->c2.tls_multi;
   const char * const peer_info = tls_multi->peer_info;
+  struct options *o = &c->options;
+
+  /* ipv6 */
+  if (c->c2.push_ifconfig_ipv6_defined && !o->push_ifconfig_ipv6_blocked)
+    {
+      push_option_fmt (gc, push_list, M_USAGE, "ifconfig-ipv6 %s/%d %s",
+		       print_in6_addr (c->c2.push_ifconfig_ipv6_local, 0, gc),
+		       c->c2.push_ifconfig_ipv6_netbits,
+		       print_in6_addr (c->c2.push_ifconfig_ipv6_remote, 0, gc));
+    }
+
+  /* ipv4 */
+  if (c->c2.push_ifconfig_defined && c->c2.push_ifconfig_local && c->c2.push_ifconfig_remote_netmask)
+    {
+      in_addr_t ifconfig_local = c->c2.push_ifconfig_local;
+      if (c->c2.push_ifconfig_local_alias)
+	ifconfig_local = c->c2.push_ifconfig_local_alias;
+      push_option_fmt (gc, push_list, M_USAGE, "ifconfig %s %s",
+		       print_in_addr_t (ifconfig_local, 0, gc),
+		       print_in_addr_t (c->c2.push_ifconfig_remote_netmask, 0, gc));
+    }
 
   /* Send peer-id if client supports it */
   optstr = peer_info ? strstr(peer_info, "IV_PROTO=") : NULL;
@@ -398,21 +419,6 @@ send_push_reply (struct context *c, struct push_list *per_client_push_list)
 
   buf_printf (&buf, "%s", push_reply_cmd);
 
-  if ( c->c2.push_ifconfig_ipv6_defined &&
-          !c->options.push_ifconfig_ipv6_blocked )
-    {
-      /* IPv6 is put into buffer first, could be lengthy */
-      buf_printf( &buf, ",ifconfig-ipv6 %s/%d %s",
-		    print_in6_addr( c->c2.push_ifconfig_ipv6_local, 0, &gc),
-		    c->c2.push_ifconfig_ipv6_netbits,
-		    print_in6_addr( c->c2.push_ifconfig_ipv6_remote, 0, &gc) );
-      if (BLEN (&buf) >= safe_cap)
-	{
-	  msg (M_WARN, "--push ifconfig-ipv6 option is too long");
-	  goto fail;
-	}
-    }
-
   /* send options which are common tp all clients */
   if (!send_push_options (c, &buf, &c->options.push_list, safe_cap, &push_sent, &multi_push))
     goto fail;
@@ -421,15 +427,6 @@ send_push_reply (struct context *c, struct push_list *per_client_push_list)
   if (!send_push_options (c, &buf, per_client_push_list, safe_cap, &push_sent, &multi_push))
     goto fail;
 
-  if (c->c2.push_ifconfig_defined && c->c2.push_ifconfig_local && c->c2.push_ifconfig_remote_netmask)
-    {
-      in_addr_t ifconfig_local = c->c2.push_ifconfig_local;
-      if (c->c2.push_ifconfig_local_alias)
-	ifconfig_local = c->c2.push_ifconfig_local_alias;
-      buf_printf (&buf, ",ifconfig %s %s",
-		  print_in_addr_t (ifconfig_local, 0, &gc),
-		  print_in_addr_t (c->c2.push_ifconfig_remote_netmask, 0, &gc));
-    }
   if (multi_push)
     buf_printf (&buf, ",push-continuation 1");
 
@@ -599,11 +596,12 @@ process_incoming_push_request (struct context *c)
 	}
       else
 	{
-	  struct push_list push_list; /* per-client push options */
+	  /* per-client push options - peer-id, cipher, ifconfig, ipv6-ifconfig */
+	  struct push_list push_list;
 	  struct gc_arena gc = gc_new ();
 
 	  CLEAR (push_list);
-	  if (prepare_push_reply (&c->options, &gc, &push_list, c->c2.tls_multi) &&
+	  if (prepare_push_reply (c, &gc, &push_list) &&
 	      send_push_reply (c, &push_list))
 	    {
 	      ret = PUSH_MSG_REQUEST;
