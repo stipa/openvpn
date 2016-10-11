@@ -48,16 +48,16 @@ static char push_reply_cmd[] = "PUSH_REPLY";
  * The string added to the push options is allocated in o->gc, so the caller
  * does not have to preserve anything.
  *
- * @param gc		GC arena where options are allocated
+ * @param gc        GC arena where options are allocated
  * @param push_list Push list containing options
  * @param msglevel  The message level to use when printing errors
- * @param fmt		Format string for the option
- * @param ...		Format string arguments
+ * @param fmt       Format string for the option
+ * @param ...       Format string arguments
  *
  * @return true on success, false on failure.
  */
-static bool push_option_fmt(struct gc_arena *gc, struct push_list *push_list, int msglevel,
-    const char *fmt, ...)
+static bool push_option_fmt(struct gc_arena *gc, struct push_list *push_list,
+			    int msglevel, const char *fmt, ...)
 #ifdef __GNUC__
 #if __USE_MINGW_ANSI_STDIO
     __attribute__ ((format (gnu_printf, 4, 5)))
@@ -305,7 +305,8 @@ send_push_request (struct context *c)
  * @return true on success, false on failure.
  */
 static bool
-prepare_push_reply (struct context *c, struct gc_arena *gc, struct push_list *push_list)
+prepare_push_reply (struct context *c, struct gc_arena *gc,
+		    struct push_list *push_list)
 {
   const char *optstr = NULL;
   const struct tls_multi *tls_multi = c->c2.tls_multi;
@@ -318,18 +319,21 @@ prepare_push_reply (struct context *c, struct gc_arena *gc, struct push_list *pu
       push_option_fmt (gc, push_list, M_USAGE, "ifconfig-ipv6 %s/%d %s",
 		       print_in6_addr (c->c2.push_ifconfig_ipv6_local, 0, gc),
 		       c->c2.push_ifconfig_ipv6_netbits,
-		       print_in6_addr (c->c2.push_ifconfig_ipv6_remote, 0, gc));
+		       print_in6_addr (c->c2.push_ifconfig_ipv6_remote,
+				       0, gc));
     }
 
   /* ipv4 */
-  if (c->c2.push_ifconfig_defined && c->c2.push_ifconfig_local && c->c2.push_ifconfig_remote_netmask)
+  if (c->c2.push_ifconfig_defined && c->c2.push_ifconfig_local &&
+      c->c2.push_ifconfig_remote_netmask)
     {
       in_addr_t ifconfig_local = c->c2.push_ifconfig_local;
       if (c->c2.push_ifconfig_local_alias)
 	ifconfig_local = c->c2.push_ifconfig_local_alias;
       push_option_fmt (gc, push_list, M_USAGE, "ifconfig %s %s",
 		       print_in_addr_t (ifconfig_local, 0, gc),
-		       print_in_addr_t (c->c2.push_ifconfig_remote_netmask, 0, gc));
+		       print_in_addr_t (c->c2.push_ifconfig_remote_netmask,
+					0, gc));
     }
 
   /* Send peer-id if client supports it */
@@ -340,7 +344,8 @@ prepare_push_reply (struct context *c, struct gc_arena *gc, struct push_list *pu
       int r = sscanf(optstr, "IV_PROTO=%d", &proto);
       if ((r == 1) && (proto >= 2))
 	{
-	  push_option_fmt(gc, push_list, M_USAGE, "peer-id %d", tls_multi->peer_id);
+	  push_option_fmt(gc, push_list, M_USAGE, "peer-id %d",
+			  tls_multi->peer_id);
 	}
     }
 
@@ -370,8 +375,9 @@ prepare_push_reply (struct context *c, struct gc_arena *gc, struct push_list *pu
 }
 
 static bool
-send_push_options (struct context *c, struct buffer *buf, struct push_list *push_list,
-    int safe_cap, bool *push_sent, bool *multi_push)
+send_push_options (struct context *c, struct buffer *buf,
+		   struct push_list *push_list, int safe_cap,
+		   bool *push_sent, bool *multi_push)
 {
   struct push_entry *e = push_list->head;
 
@@ -420,11 +426,13 @@ send_push_reply (struct context *c, struct push_list *per_client_push_list)
   buf_printf (&buf, "%s", push_reply_cmd);
 
   /* send options which are common to all clients */
-  if (!send_push_options (c, &buf, &c->options.push_list, safe_cap, &push_sent, &multi_push))
+  if (!send_push_options (c, &buf, &c->options.push_list, safe_cap,
+			  &push_sent, &multi_push))
     goto fail;
 
   /* send client-specific options */ 
-  if (!send_push_options (c, &buf, per_client_push_list, safe_cap, &push_sent, &multi_push))
+  if (!send_push_options (c, &buf, per_client_push_list, safe_cap,
+			  &push_sent, &multi_push))
     goto fail;
 
   if (multi_push)
@@ -461,7 +469,8 @@ send_push_reply (struct context *c, struct push_list *per_client_push_list)
 }
 
 static void
-push_option_ex (struct gc_arena *gc, struct push_list *push_list, const char *opt, bool enable, int msglevel)
+push_option_ex (struct gc_arena *gc, struct push_list *push_list,
+		const char *opt, bool enable, int msglevel)
 {
   if (!string_class (opt, CC_ANY, CC_COMMA))
     {
@@ -503,7 +512,8 @@ clone_push_list (struct options *o)
       push_reset (o);
       while (e)
 	{
-	  push_option_ex (&o->gc, &o->push_list, string_alloc (e->option, &o->gc), true, M_FATAL);
+	  push_option_ex (&o->gc, &o->push_list,
+			  string_alloc (e->option, &o->gc), true, M_FATAL);
 	  e = e->next;
 	}
     }
@@ -517,8 +527,8 @@ push_options (struct options *o, char **p, int msglevel, struct gc_arena *gc)
   push_option (o, opt, msglevel);
 }
 
-static bool push_option_fmt(struct gc_arena *gc, struct push_list *push_list, int msglevel,
-    const char *format, ...)
+static bool push_option_fmt(struct gc_arena *gc, struct push_list *push_list,
+			    int msglevel, const char *format, ...)
 {
   va_list arglist;
   char tmp[256] = {0};
