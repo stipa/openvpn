@@ -483,7 +483,8 @@ Bug fixes
 
 New features
 ------------
-
+- On the client side recursively routed packets, which have same destination as host,
+  are dropped. This could be disabled with --allow-recursive-routing option.
 - PolarSSL support
 - Add plug-in API v3
 - IPv6 payload and transport support
