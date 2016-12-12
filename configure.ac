@@ -1204,6 +1204,10 @@ if test "${enable_plugin_auth_pam}" = "yes"; then
 fi
 
 if test "${enable_async_push}" = "yes"; then
+	if test "${enable_plugins}" = "no"; then
+		AC_MSG_ERROR([--enable_async_push requires --enable-plugins])
+	fi
+
 	AC_CHECK_HEADERS(
 		[sys/inotify.h],
 		AC_DEFINE([ENABLE_ASYNC_PUSH], [1], [Enable async push]),
