@@ -4090,7 +4090,9 @@ notifications unless this option is enabled.
 .TP
 .B \-\-allow\-recursive\-routing
 When this option is set, OpenVPN will not drop incoming tun packets
-with same destination as host.
+with same destination as host. Could be useful when packets sent by openvpn
+itself are not subject to the routing tables that would move packets
+into the tunnel.
 .\"*********************************************************
 .SS Data Channel Encryption Options:
 These options are meaningful for both Static & TLS\-negotiated key modes
