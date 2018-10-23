@@ -449,7 +449,11 @@ __attribute__ ((format(__printf__, 3, 4)))
 ;
 
 
+#ifdef _WIN32
 /*
+ * This is under #ifdef because only Windows-specific code
+ * uses this function and its implementation is broken in OpenBSD 4.9
+ *
  * Like swprintf but guarantees null termination for size > 0
  */
 bool
@@ -458,6 +462,7 @@ openvpn_swprintf(wchar_t *const str, const size_t size, const wchar_t *const for
  * Unlike in openvpn_snprintf, we cannot use format attributes since
  * GCC doesn't support wprintf as archetype.
  */
+#endif
 
 /*
  * remove/add trailing characters

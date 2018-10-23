@@ -310,6 +310,7 @@ openvpn_snprintf(char *str, size_t size, const char *format, ...)
     return (len >= 0 && len < size);
 }
 
+#ifdef _WIN32
 bool
 openvpn_swprintf(wchar_t *const str, const size_t size, const wchar_t *const format, ...)
 {
@@ -318,12 +319,14 @@ openvpn_swprintf(wchar_t *const str, const size_t size, const wchar_t *const for
     if (size > 0)
     {
         va_start(arglist, format);
+        /* vswprintf is missing in OpenBSD 4.2 */
         len = vswprintf(str, size, format, arglist);
         va_end(arglist);
         str[size - 1] = L'\0';
     }
     return (len >= 0 && len < size);
 }
+#endif
 
 /*
  * write a string to the end of a buffer that was
