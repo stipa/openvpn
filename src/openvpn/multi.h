@@ -62,6 +62,12 @@ struct deferred_signal_schedule_entry
     struct timeval wakeup;
 };
 
+enum client_connect_status
+{
+    CC_STATUS_NOT_ESTABLISHED,
+    CC_STATUS_ESTABLISHED
+};
+
 /**
  * Server-mode state structure for one single VPN tunnel.
  *
@@ -104,7 +110,7 @@ struct multi_instance {
     bool did_cid_hash;
     struct buffer_list *cc_config;
 #endif
-    bool connection_established_flag;
+    enum client_connect_status client_connect_status;
     bool did_iroutes;
     int n_clients_delta; /* added to multi_context.n_clients when instance is closed */
 
@@ -195,9 +201,9 @@ struct multi_context {
  */
 enum client_connect_return
 {
-  CC_RET_FAILED,
-  CC_RET_SUCCEEDED,
-  CC_RET_SKIPPED
+    CC_RET_FAILED,
+    CC_RET_SUCCEEDED,
+    CC_RET_SKIPPED
 };
 
 /*
