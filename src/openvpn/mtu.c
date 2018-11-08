@@ -30,6 +30,7 @@
 #include "syshead.h"
 
 #include "common.h"
+#include "crypto.h"
 #include "buffer.h"
 #include "error.h"
 #include "integer.h"
@@ -224,6 +225,24 @@ translate_mtu_discover_type_name(const char *name)
     msg(M_FATAL, MTUDISC_NOT_SUPPORTED_MSG);
 #endif
     return -1;                  /* NOTREACHED */
+}
+
+void
+adjust_frame_overhead(struct options *options, struct frame *frame, const char *log_prefix)
+{
+    struct key_type kt;
+    init_key_type(&kt, options->ciphername, options->authname,
+                  options->keysize, true, true);
+    bool packet_id_long_form = cipher_kt_mode_ofb_cfb(kt.cipher);
+
+    /* Update frame parameters: undo worst-case overhead, add actual overhead */
+    frame_remove_from_extra_frame(frame, crypto_max_overhead());
+    crypto_adjust_frame_parameters(frame, &kt, options->replay, packet_id_long_form);
+
+    frame_finalize(frame, options->ce.link_mtu_defined, options->ce.link_mtu,
+                   options->ce.tun_mtu_defined, options->ce.tun_mtu);
+    frame_init_mssfix(frame, options);
+    frame_print(frame, D_MTU_INFO, log_prefix);
 }
 
 #if EXTENDED_SOCKET_ERROR_CAPABILITY

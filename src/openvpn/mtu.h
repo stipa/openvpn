@@ -234,6 +234,12 @@ void alloc_buf_sock_tun(struct buffer *buf,
 void frame_init_mssfix(struct frame *frame, const struct options *options);
 
 /*
+ * adjust frame overhead based on cipher/auth.
+*/
+void adjust_frame_overhead(struct options *options, struct frame *frame,
+                           const char *log_prefix);
+
+/*
  * EXTENDED_SOCKET_ERROR_CAPABILITY functions -- print extra error info
  * on socket errors, such as PMTU size.  As of 2003.05.11, only works
  * on Linux 2.4+.

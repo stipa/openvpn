@@ -476,13 +476,11 @@ void tls_update_remote_addr(struct tls_multi *multi,
  *
  * @param session       The TLS session to update.
  * @param options       The options to use when updating session.
- * @param frame         The frame options for this session (frame overhead is
- *                      adjusted based on the selected cipher/auth).
  *
  * @return true if updating succeeded, false otherwise.
  */
 bool tls_session_update_crypto_params(struct tls_session *session,
-                                      struct options *options, struct frame *frame);
+                                      struct options *options);
 
 /**
  * "Poor man's NCP": Use peer cipher if it is an allowed (NCP) cipher.
