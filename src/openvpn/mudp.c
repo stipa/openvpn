@@ -236,10 +236,40 @@ multi_process_io_udp(struct multi_context *m)
     /* Incoming data on TUN device */
     else if (status & TUN_READ)
     {
-        read_incoming_tun(&m->top);
-        if (!IS_SIG(&m->top))
+#ifdef _WIN32
+        if (m->top.options.wintun)
         {
-            multi_process_incoming_tun(m, mpp_flags);
+            /* only read from driver if there are no packets in buffer */
+            if (BLEN(&m->top.c2.wintun_buf) == 0)
+            {
+                read_incoming_tun(&m->top);
+                m->top.c2.wintun_buf = m->top.c2.buf;
+            }
+            if (!IS_SIG(&m->top))
+            {
+                const uint32_t size = read_incoming_wintun(&m->top);
+                if (size > 0)
+                {
+                    multi_process_incoming_tun(m, mpp_flags);
+                    /* skip the end padding */
+                    buf_advance(&m->top.c2.wintun_buf, (4 - (size & 3)) % 4);
+                }
+            }
+
+            /*
+             * We need to write processed wintun packet to link,
+             * hence we give control back to event loop, which will
+             * call us again if wintun buffer is not empty
+             */
+        }
+        else
+#endif
+        {
+            read_incoming_tun(&m->top);
+            if (!IS_SIG(&m->top))
+            {
+                multi_process_incoming_tun(m, mpp_flags);
+            }
         }
     }
 #ifdef ENABLE_ASYNC_PUSH

@@ -38,6 +38,10 @@
 #include "misc.h"
 #include "networking.h"
 
+#ifdef _WIN32
+#define WINTUN_COMPONENT_ID "wintun"
+#endif
+
 #if defined(_WIN32) || defined(TARGET_ANDROID)
 
 #define TUN_ADAPTER_INDEX_INVALID ((DWORD)-1)
@@ -174,6 +178,10 @@ struct tuntap
     /* Windows adapter index for TAP-Windows adapter,
      * ~0 if undefined */
     DWORD adapter_index;
+
+    bool wintun; /* true if wintun is used instead of tap-windows6 */
+    bool wintun_write_buf_registered;
+    char wintun_padding[16];
 
     int standby_iter;
 #else  /* ifdef _WIN32 */
@@ -341,6 +349,7 @@ route_order(void)
 struct tap_reg
 {
     const char *guid;
+    DWORD luid_index;
     struct tap_reg *next;
 };
 
@@ -378,7 +387,7 @@ DWORD adapter_index_of_ip(const IP_ADAPTER_INFO *list,
                           int *count,
                           in_addr_t *netmask);
 
-void show_tap_win_adapters(int msglev, int warnlev);
+void show_tap_win_adapters(int msglev, int warnlev, bool wintun);
 
 void show_adapters(int msglev);
 
@@ -469,6 +478,27 @@ read_tun_buffered(struct tuntap *tt, struct buffer *buf)
 static inline int
 write_tun_buffered(struct tuntap *tt, struct buffer *buf)
 {
+    if (tt->wintun)
+    {
+        int len = BLEN(buf);
+
+        /* variable len end padding */
+        int end_padding_len = (4 - (len & 3)) % 4;
+        if (end_padding_len > 0)
+        {
+            if (!buf_write(buf, tt->wintun_padding, end_padding_len))
+            {
+                return -1;
+            }
+        }
+
+        /* 4 bytes size */
+        if (!buf_write_prepend(buf, &len, 4))
+        {
+            return -1;
+        }
+    }
+
     return tun_write_win32(tt, buf);
 }
 

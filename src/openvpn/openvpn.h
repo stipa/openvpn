@@ -383,6 +383,10 @@ struct context_2
     struct buffer buf;
     struct buffer to_tun;
     struct buffer to_link;
+#ifdef _WIN32
+    /* can contain multiple packets */
+    struct buffer wintun_buf;
+#endif
 
     /* should we print R|W|r|w to console on packet transfers? */
     bool log_rw;
