@@ -1702,6 +1702,10 @@ do_init_tun(struct context *c)
                             c->c2.es,
                             &c->net_ctx);
 
+#ifdef _WIN32
+    c->c1.tuntap->wintun = c->options.wintun;
+#endif
+
     init_tun_post(c->c1.tuntap,
                   &c->c2.frame,
                   &c->options.tuntap_options);
@@ -1744,6 +1748,9 @@ do_open_tun(struct context *c)
     /* store (hide) interactive service handle in tuntap_options */
     c->c1.tuntap->options.msg_channel = c->options.msg_channel;
     msg(D_ROUTE, "interactive service msg_channel=%u", (unsigned int) c->options.msg_channel);
+
+    c->c1.tuntap->wintun = c->options.wintun;
+
 #endif
 
     /* allocate route list structure */

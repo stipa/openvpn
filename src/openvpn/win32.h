@@ -212,10 +212,12 @@ struct overlapped_io {
     struct buffer buf;
 };
 
-void overlapped_io_init(struct overlapped_io *o,
-                        const struct frame *frame,
-                        BOOL event_state,
-                        bool tuntap_buffer);
+void
+overlapped_io_init(struct overlapped_io *o,
+                   const struct frame *frame,
+                   bool reads, /* if true: reads buffer, if false: writes buffer */
+                   bool tuntap_buffer,  /* if true: tuntap buffer, if false: socket buffer */
+                   bool wintun);
 
 void overlapped_io_close(struct overlapped_io *o);
 
@@ -344,6 +346,15 @@ bool send_msg_iservice_ex(HANDLE pipe, const void *data, size_t size,
  */
 int
 openvpn_execve(const struct argv *a, const struct env_set *es, const unsigned int flags);
+
+/**
+ * Impersonates current thread as SYSTEM, required
+ * to open Wintun device.
+ *
+ * @returns     True if it succeeds, false if it fails.
+ */
+bool
+impersonate_as_system();
 
 #endif /* ifndef OPENVPN_WIN32_H */
 #endif /* ifdef _WIN32 */

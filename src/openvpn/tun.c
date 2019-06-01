@@ -790,8 +790,8 @@ init_tun_post(struct tuntap *tt,
 {
     tt->options = *options;
 #ifdef _WIN32
-    overlapped_io_init(&tt->reads, frame, FALSE, true);
-    overlapped_io_init(&tt->writes, frame, TRUE, true);
+    overlapped_io_init(&tt->reads, frame, true, true, tt->wintun);
+    overlapped_io_init(&tt->writes, frame, false, true, tt->wintun);
     tt->rw_handle.read = tt->reads.overlapped.hEvent;
     tt->rw_handle.write = tt->writes.overlapped.hEvent;
     tt->adapter_index = TUN_ADAPTER_INDEX_INVALID;
@@ -3445,7 +3445,7 @@ tun_finalize(
 }
 
 const struct tap_reg *
-get_tap_reg(struct gc_arena *gc)
+get_tap_reg(struct gc_arena *gc, bool wintun)
 {
     HKEY adapter_key;
     LONG status;
@@ -3476,6 +3476,20 @@ get_tap_reg(struct gc_arena *gc)
         char net_cfg_instance_id_string[] = "NetCfgInstanceId";
         char net_cfg_instance_id[256];
         DWORD data_type;
+        char expected_component_id[256];
+        char expected_root_component_id[256];
+        char net_luid_index_string[] = "NetLuidIndex";
+        DWORD luid_index;
+
+        if (wintun)
+        {
+            strcpy(expected_component_id, WINTUN_COMPONENT_ID);
+        }
+        else
+        {
+            strcpy(expected_component_id, TAP_WIN_COMPONENT_ID);
+        }
+        openvpn_snprintf(expected_root_component_id, sizeof(expected_root_component_id), "root\\%s", expected_component_id);
 
         len = sizeof(enum_name);
         status = RegEnumKeyEx(
@@ -3540,12 +3554,26 @@ get_tap_reg(struct gc_arena *gc)
 
                 if (status == ERROR_SUCCESS && data_type == REG_SZ)
                 {
-                    if (!strcmp(component_id, TAP_WIN_COMPONENT_ID) ||
-                        !strcmp(component_id, "root\\" TAP_WIN_COMPONENT_ID))
+                    if (!strcmp(component_id, expected_component_id) ||
+                        !strcmp(component_id, expected_root_component_id))
                     {
                         struct tap_reg *reg;
                         ALLOC_OBJ_CLEAR_GC(reg, struct tap_reg, gc);
                         reg->guid = string_alloc(net_cfg_instance_id, gc);
+
+                        len = sizeof(luid_index);
+                        status = RegQueryValueEx(
+                            unit_key,
+                            net_luid_index_string,
+                            NULL,
+                            &data_type,
+                            (LPBYTE)&luid_index,
+                            &len);
+
+                        if (status == ERROR_SUCCESS && data_type == REG_DWORD)
+                        {
+                            reg->luid_index = luid_index;
+                        }
 
                         /* link into return list */
                         if (!first)
@@ -3759,7 +3787,7 @@ show_valid_win32_tun_subnets(void)
 }
 
 void
-show_tap_win_adapters(int msglev, int warnlev)
+show_tap_win_adapters(int msglev, int warnlev, bool wintun)
 {
     struct gc_arena gc = gc_new();
 
@@ -3773,10 +3801,10 @@ show_tap_win_adapters(int msglev, int warnlev)
     const struct tap_reg *tr1;
     const struct panel_reg *pr;
 
-    const struct tap_reg *tap_reg = get_tap_reg(&gc);
+    const struct tap_reg *tap_reg = get_tap_reg(&gc, wintun);
     const struct panel_reg *panel_reg = get_panel_reg(&gc);
 
-    msg(msglev, "Available TAP-WIN32 adapters [name, GUID]:");
+    msg(msglev, "Available %s adapters [name, GUID]:", wintun ? "WinTun" : "TAP-WIN32");
 
     /* loop through each TAP-Windows adapter registry entry */
     for (tr = tap_reg; tr != NULL; tr = tr->next)
@@ -3898,13 +3926,14 @@ at_least_one_tap_win(const struct tap_reg *tap_reg)
 }
 
 /*
- * Get an adapter GUID and optional actual_name from the
+ * Get an adapter GUID, LUID index and optional actual_name from the
  * registry for the TAP device # = device_number.
  */
 static const char *
 get_unspecified_device_guid(const int device_number,
                             char *actual_name,
                             int actual_name_size,
+                            int *luid_index,
                             const struct tap_reg *tap_reg_src,
                             const struct panel_reg *panel_reg_src,
                             struct gc_arena *gc)
@@ -3951,6 +3980,11 @@ get_unspecified_device_guid(const int device_number,
         {
             buf_printf(&actual, "%s", tap_reg->guid);
         }
+    }
+
+    if (luid_index)
+    {
+        *luid_index = tap_reg->luid_index;
     }
 
     /* Save GUID for return value */
@@ -4551,7 +4585,7 @@ get_adapter_index_flexible(const char *name)  /* actual name or GUID */
     }
     if (index == TUN_ADAPTER_INDEX_INVALID)
     {
-        const struct tap_reg *tap_reg = get_tap_reg(&gc);
+        const struct tap_reg *tap_reg = get_tap_reg(&gc, false);
         const struct panel_reg *panel_reg = get_panel_reg(&gc);
         const char *guid = name_to_guid(name, tap_reg, panel_reg);
         index = get_adapter_index_method_1(guid);
@@ -4678,7 +4712,7 @@ void
 tap_allow_nonadmin_access(const char *dev_node)
 {
     struct gc_arena gc = gc_new();
-    const struct tap_reg *tap_reg = get_tap_reg(&gc);
+    const struct tap_reg *tap_reg = get_tap_reg(&gc, false);
     const struct panel_reg *panel_reg = get_panel_reg(&gc);
     const char *device_guid = NULL;
     HANDLE hand;
@@ -4732,6 +4766,7 @@ tap_allow_nonadmin_access(const char *dev_node)
                                                       actual_buffer,
                                                       sizeof(actual_buffer),
                                                       tap_reg,
+                                                      NULL,
                                                       panel_reg,
                                                       &gc);
 
@@ -5291,7 +5326,7 @@ out:
 static const char *
 netsh_get_id(const char *dev_node, struct gc_arena *gc)
 {
-    const struct tap_reg *tap_reg = get_tap_reg(gc);
+    const struct tap_reg *tap_reg = get_tap_reg(gc, false);
     const struct panel_reg *panel_reg = get_panel_reg(gc);
     struct buffer actual = alloc_buf_gc(256, gc);
     const char *guid;
@@ -5304,9 +5339,9 @@ netsh_get_id(const char *dev_node, struct gc_arena *gc)
     }
     else
     {
-        guid = get_unspecified_device_guid(0, BPTR(&actual), BCAP(&actual), tap_reg, panel_reg, gc);
+        guid = get_unspecified_device_guid(0, BPTR(&actual), BCAP(&actual), NULL, tap_reg, panel_reg, gc);
 
-        if (get_unspecified_device_guid(1, NULL, 0, tap_reg, panel_reg, gc)) /* ambiguous if more than one TAP-Windows adapter */
+        if (get_unspecified_device_guid(1, NULL, 0, NULL, tap_reg, panel_reg, gc)) /* ambiguous if more than one TAP-Windows adapter */
         {
             guid = NULL;
         }
@@ -5580,6 +5615,7 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
     struct gc_arena gc = gc_new();
     char device_path[256];
     const char *device_guid = NULL;
+    DWORD device_luid_index = 0;
     DWORD len;
     bool dhcp_masq = false;
     bool dhcp_masq_post = false;
@@ -5606,7 +5642,7 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
      * Lookup the device name in the registry, using the --dev-node high level name.
      */
     {
-        const struct tap_reg *tap_reg = get_tap_reg(&gc);
+        const struct tap_reg *tap_reg = get_tap_reg(&gc, tt->wintun);
         const struct panel_reg *panel_reg = get_panel_reg(&gc);
         char actual_buffer[256];
 
@@ -5660,6 +5696,7 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
                 device_guid = get_unspecified_device_guid(device_number,
                                                           actual_buffer,
                                                           sizeof(actual_buffer),
+                                                          &device_luid_index,
                                                           tap_reg,
                                                           panel_reg,
                                                           &gc);
@@ -5669,11 +5706,28 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
                     msg(M_FATAL, "All TAP-Windows adapters on this system are currently in use.");
                 }
 
-                /* Open Windows TAP-Windows adapter */
-                openvpn_snprintf(device_path, sizeof(device_path), "%s%s%s",
-                                 USERMODEDEVICEDIR,
-                                 device_guid,
-                                 TAP_WIN_SUFFIX);
+                /* Open wintun / tap-windows6 adapter */
+                if (tt->wintun)
+                {
+                    openvpn_snprintf(device_path, sizeof(device_path), "%sWINTUN%lu",
+                                     USERMODEDEVICEDIR,
+                                     device_luid_index);
+                }
+                else
+                {
+                    openvpn_snprintf(device_path, sizeof(device_path), "%s%s%s",
+                                     USERMODEDEVICEDIR,
+                                     device_guid,
+                                     TAP_WIN_SUFFIX);
+                }
+
+                if (tt->wintun)
+                {
+                    if (!impersonate_as_system())
+                    {
+                        msg(M_FATAL, "ERROR:  Failed to impersonate as SYSTEM, make sure process is running under privileged account");
+                    }
+                }
 
                 if (tt->options.msg_channel)
                 {
@@ -5690,6 +5744,14 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
                         FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
                         0
                     );
+                }
+
+                if (tt->wintun)
+                {
+                    if (!RevertToSelf())
+                    {
+                        msg(M_FATAL, "ERROR:  RevertToSelf error: %lu", GetLastError());
+                    }
                 }
 
                 if (tt->hand == INVALID_HANDLE_VALUE)
@@ -5710,12 +5772,14 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
         tt->actual_name = string_alloc(actual_buffer, NULL);
     }
 
-    msg(M_INFO, "TAP-WIN32 device [%s] opened: %s", tt->actual_name, device_path);
+    msg(M_INFO, "%s device device [%s] opened: %s", tt->wintun ? "Wintun" : "TAP - WIN32", tt->actual_name, device_path);
     tt->adapter_index = get_adapter_index(device_guid);
 
-    /* get driver version info */
+    if (!tt->wintun)
     {
+        /* get driver version info */
         ULONG info[3];
+        ULONG mtu;
         CLEAR(info);
         if (DeviceIoControl(tt->hand, TAP_WIN_IOCTL_GET_VERSION,
                             &info, sizeof(info),
@@ -5750,11 +5814,8 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
         {
             msg( M_FATAL, "ERROR:  Tap-Win32 driver version %d.%d is buggy regarding small IPv4 packets in TUN mode. Upgrade your Tap-Win32 driver.", (int) info[0], (int) info[1] );
         }
-    }
 
-    /* get driver MTU */
-    {
-        ULONG mtu;
+        /* get driver MTU */
         if (DeviceIoControl(tt->hand, TAP_WIN_IOCTL_GET_MTU,
                             &mtu, sizeof(mtu),
                             &mtu, sizeof(mtu), &len, NULL))
@@ -5812,7 +5873,7 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
 
     /* set point-to-point mode if TUN device */
 
-    if (tt->type == DEV_TYPE_TUN)
+    if (tt->type == DEV_TYPE_TUN && !tt->wintun)
     {
         if (!tt->did_ifconfig_setup && !tt->did_ifconfig_ipv6_setup)
         {
@@ -5900,70 +5961,79 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
             ep[2] = dhcp_masq_addr(tt->local, tt->adapter_netmask, tt->options.dhcp_masq_custom_offset ? tt->options.dhcp_masq_offset : 0);
         }
 
-        /* lease time in seconds */
-        ep[3] = (uint32_t) tt->options.dhcp_lease_time;
+        if (!tt->wintun)
+        {
+            /* lease time in seconds */
+            ep[3] = (uint32_t)tt->options.dhcp_lease_time;
 
-        ASSERT(ep[3] > 0);
+            ASSERT(ep[3] > 0);
 
 #ifndef SIMULATE_DHCP_FAILED /* this code is disabled to simulate bad DHCP negotiation */
-        if (!DeviceIoControl(tt->hand, TAP_WIN_IOCTL_CONFIG_DHCP_MASQ,
-                             ep, sizeof(ep),
-                             ep, sizeof(ep), &len, NULL))
-        {
-            msg(M_FATAL, "ERROR: The TAP-Windows driver rejected a DeviceIoControl call to set TAP_WIN_IOCTL_CONFIG_DHCP_MASQ mode");
-        }
+            if (!DeviceIoControl(tt->hand, TAP_WIN_IOCTL_CONFIG_DHCP_MASQ,
+                ep, sizeof(ep),
+                ep, sizeof(ep), &len, NULL))
+            {
+                msg(M_FATAL, "ERROR: The TAP-Windows driver rejected a DeviceIoControl call to set TAP_WIN_IOCTL_CONFIG_DHCP_MASQ mode");
+            }
 
-        msg(M_INFO, "Notified TAP-Windows driver to set a DHCP IP/netmask of %s/%s on interface %s [DHCP-serv: %s, lease-time: %d]",
-            print_in_addr_t(tt->local, 0, &gc),
-            print_in_addr_t(tt->adapter_netmask, 0, &gc),
-            device_guid,
-            print_in_addr_t(ep[2], IA_NET_ORDER, &gc),
-            ep[3]
+            msg(M_INFO, "Notified TAP-Windows driver to set a DHCP IP/netmask of %s/%s on interface %s [DHCP-serv: %s, lease-time: %d]",
+                print_in_addr_t(tt->local, 0, &gc),
+                print_in_addr_t(tt->adapter_netmask, 0, &gc),
+                device_guid,
+                print_in_addr_t(ep[2], IA_NET_ORDER, &gc),
+                ep[3]
             );
 
-        /* user-supplied DHCP options capability */
-        if (tt->options.dhcp_options)
-        {
-            struct buffer buf = alloc_buf(256);
-            if (build_dhcp_options_string(&buf, &tt->options))
+            /* user-supplied DHCP options capability */
+            if (tt->options.dhcp_options)
             {
-                msg(D_DHCP_OPT, "DHCP option string: %s", format_hex(BPTR(&buf), BLEN(&buf), 0, &gc));
-                if (!DeviceIoControl(tt->hand, TAP_WIN_IOCTL_CONFIG_DHCP_SET_OPT,
-                                     BPTR(&buf), BLEN(&buf),
-                                     BPTR(&buf), BLEN(&buf), &len, NULL))
+                struct buffer buf = alloc_buf(256);
+                if (build_dhcp_options_string(&buf, &tt->options))
                 {
-                    msg(M_FATAL, "ERROR: The TAP-Windows driver rejected a TAP_WIN_IOCTL_CONFIG_DHCP_SET_OPT DeviceIoControl call");
+                    msg(D_DHCP_OPT, "DHCP option string: %s", format_hex(BPTR(&buf), BLEN(&buf), 0, &gc));
+                    if (!DeviceIoControl(tt->hand, TAP_WIN_IOCTL_CONFIG_DHCP_SET_OPT,
+                        BPTR(&buf), BLEN(&buf),
+                        BPTR(&buf), BLEN(&buf), &len, NULL))
+                    {
+                        msg(M_FATAL, "ERROR: The TAP-Windows driver rejected a TAP_WIN_IOCTL_CONFIG_DHCP_SET_OPT DeviceIoControl call");
+                    }
                 }
+                else
+                {
+                    msg(M_WARN, "DHCP option string not set due to error");
+                }
+                free_buf(&buf);
             }
-            else
-            {
-                msg(M_WARN, "DHCP option string not set due to error");
-            }
-            free_buf(&buf);
-        }
 #endif /* ifndef SIMULATE_DHCP_FAILED */
+        }
+
+
     }
 
-    /* set driver media status to 'connected' */
+    if (!tt->wintun)
     {
-        ULONG status = TRUE;
-        if (!DeviceIoControl(tt->hand, TAP_WIN_IOCTL_SET_MEDIA_STATUS,
-                             &status, sizeof(status),
-                             &status, sizeof(status), &len, NULL))
+        /* set driver media status to 'connected' */
         {
-            msg(M_WARN, "WARNING: The TAP-Windows driver rejected a TAP_WIN_IOCTL_SET_MEDIA_STATUS DeviceIoControl call.");
+            ULONG status = TRUE;
+            if (!DeviceIoControl(tt->hand, TAP_WIN_IOCTL_SET_MEDIA_STATUS,
+                &status, sizeof(status),
+                &status, sizeof(status), &len, NULL))
+            {
+              msg(M_WARN, "WARNING: The TAP-Windows driver rejected a TAP_WIN_IOCTL_SET_MEDIA_STATUS DeviceIoControl call.");
+            }
+        }
+
+        /* possible wait for adapter to come up */
+        {
+            int s = tt->options.tap_sleep;
+            if (s > 0)
+            {
+                msg(M_INFO, "Sleeping for %d seconds...", s);
+                management_sleep(s);
+            }
         }
     }
 
-    /* possible wait for adapter to come up */
-    {
-        int s = tt->options.tap_sleep;
-        if (s > 0)
-        {
-            msg(M_INFO, "Sleeping for %d seconds...", s);
-            management_sleep(s);
-        }
-    }
 
     /* possibly use IP Helper API to set IP address on adapter */
     {

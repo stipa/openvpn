@@ -1505,12 +1505,6 @@ ipv6_send_icmp_unreachable(struct context *c, struct buffer *buf, bool client)
 
     int icmpheader_len = sizeof(struct openvpn_ipv6hdr)
                          + sizeof(struct openvpn_icmp6hdr);
-    int totalheader_len = icmpheader_len;
-
-    if (TUNNEL_TYPE(c->c1.tuntap) == DEV_TYPE_TAP)
-    {
-        totalheader_len += sizeof(struct openvpn_ethhdr);
-    }
 
     /*
      * Calculate size for payload, defined in the standard that the resulting
@@ -1535,7 +1529,8 @@ ipv6_send_icmp_unreachable(struct context *c, struct buffer *buf, bool client)
         c->c2.to_link = c->c2.buffers->aux_buf;
         outbuf = &(c->c2.to_link);
     }
-    ASSERT(buf_init(outbuf, totalheader_len));
+    /* reserve enough headroom to prepend with eth/ip/icmp header and Wintun encapsulation */
+    ASSERT(buf_init(outbuf, FRAME_HEADROOM(&c->c2.frame)));
 
     /* Fill the end of the buffer with original packet */
     ASSERT(buf_safe(outbuf, payload_len));
@@ -2182,6 +2177,40 @@ io_wait_dowork(struct context *c, const unsigned int flags)
     dmsg(D_EVENT_WAIT, "I/O WAIT status=0x%04x", c->c2.event_set_status);
 }
 
+#ifdef _WIN32
+uint32_t
+read_incoming_wintun(struct context *c)
+{
+    struct buffer *buf = &c->c2.wintun_buf;
+    uint32_t *size = NULL;
+    int end_padding_len = 0;
+
+    /* get packet size */
+    size = (uint32_t *)buf_read_alloc(buf, 4);
+    if (size == NULL)
+    {
+        return 0;
+    }
+
+    /* skip start padding */
+    if (!buf_advance(buf, 12))
+    {
+        return 0;
+    }
+
+    /* copy packet */
+    c->c2.buf = c->c2.buffers->read_tun_buf;
+    buf_init(&c->c2.buf, FRAME_HEADROOM(&c->c2.frame));
+    buf_safe(&c->c2.buf, MAX_RW_SIZE_TUN(&c->c2.frame));
+    if (!buf_copy_n(&c->c2.buf, buf, (int)*size))
+    {
+        return 0;
+    }
+
+    return *size;
+}
+#endif
+
 void
 process_io(struct context *c)
 {
@@ -2217,10 +2246,40 @@ process_io(struct context *c)
     /* Incoming data on TUN device */
     else if (status & TUN_READ)
     {
-        read_incoming_tun(c);
-        if (!IS_SIG(c))
+#ifdef _WIN32
+        if (c->options.wintun)
         {
-            process_incoming_tun(c);
+            /* only read from driver if there are no packets in buffer */
+            if (BLEN(&c->c2.wintun_buf) == 0)
+            {
+                read_incoming_tun(c);
+                c->c2.wintun_buf = c->c2.buf;
+            }
+            if (!IS_SIG(c))
+            {
+                const uint32_t size = read_incoming_wintun(c);
+                if (size > 0)
+                {
+                    process_incoming_tun(c);
+                    /* skip the end padding */
+                    buf_advance(&c->c2.wintun_buf, (16 - (size & 15)) % 16);
+                }
+            }
+
+            /*
+             * We need to write processed wintun packet to link,
+             * hence we give control back to event loop, which will
+             * call us again if wintun buffer is not empty
+             */
+        }
+        else
+#endif
+        {
+            read_incoming_tun(c);
+            if (!IS_SIG(c))
+            {
+                process_incoming_tun(c);
+            }
         }
     }
 }
