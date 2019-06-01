@@ -61,6 +61,7 @@
 #define IOW_MBUF            (1<<7)
 #define IOW_READ_TUN_FORCE  (1<<8)
 #define IOW_WAIT_SIGNAL     (1<<9)
+#define IOW_READ_WINTUN_BUF (1<<10)
 
 #define IOW_READ            (IOW_READ_TUN|IOW_READ_LINK)
 
@@ -375,6 +376,12 @@ p2p_iow_flags(const struct context *c)
     {
         flags |= IOW_TO_TUN;
     }
+#ifdef _WIN32
+    if (c->c2.wintun_buf.len > 0)
+    {
+        flags |= IOW_READ_WINTUN_BUF;
+    }
+#endif
     return flags;
 }
 
@@ -401,6 +408,14 @@ io_wait(struct context *c, const unsigned int flags)
         }
         c->c2.event_set_status = ret;
     }
+#ifdef _WIN32
+    /* make sure we write to link before reading from wintun buffer,
+     * otherwise we'll overwrite c2->to_link buffer and lose a packet */
+    else if (!(flags & IOW_TO_LINK) && (flags & IOW_READ_WINTUN_BUF))
+    {
+        c->c2.event_set_status = TUN_READ;
+    }
+#endif
     else
     {
         /* slow path */
@@ -409,5 +424,21 @@ io_wait(struct context *c, const unsigned int flags)
 }
 
 #define CONNECTION_ESTABLISHED(c) (get_link_socket_info(c)->connection_established)
+
+#ifdef _WIN32
+
+/**
+ * Reads a single packet from wintun buffer.
+ * It is caller's responsibility to advance buffer
+ * over the end padding after processing packet.
+ *
+ * @param c          - The context structure of the VPN tunnel associated with
+ *                     the packet.
+ *
+ * @returns size of packet, 0 of packet cannot be read.
+ */
+uint32_t
+read_incoming_wintun(struct context *c);
+#endif
 
 #endif /* FORWARD_H */
