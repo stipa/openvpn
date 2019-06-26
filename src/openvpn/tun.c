@@ -5248,6 +5248,43 @@ out:
     return ret;
 }
 
+static HANDLE
+service_open_tun_device(const HANDLE pipe, const char* device_path)
+{
+    open_tun_device_result_message_t result_msg;
+    struct gc_arena gc = gc_new();
+    open_tun_device_message_t open_tun_device = {
+        .header = {
+            msg_open_tun_device,
+            sizeof(open_tun_device_message_t),
+            0
+        }
+    };
+    result_msg.handle = INVALID_HANDLE_VALUE;
+
+    strncpynt(open_tun_device.device_path, device_path, sizeof(open_tun_device.device_path));
+
+    if (!send_msg_iservice_ex(pipe, &open_tun_device, sizeof(open_tun_device),
+        &result_msg, sizeof(result_msg), "Open_tun_device"))
+    {
+        goto out;
+    }
+
+    if (result_msg.error_number != NO_ERROR)
+    {
+        msg(D_TUNTAP_INFO, "TUN: opening tun handle using service failed: %s [status=%u device_path=%s]",
+            strerror_win32(result_msg.error_number, &gc), result_msg.error_number, device_path);
+    }
+    else
+    {
+        msg(M_INFO, "Opened tun device %s using service", device_path);
+    }
+
+out:
+    gc_free(&gc);
+    return result_msg.handle;
+}
+
 /*
  * Return a TAP name for netsh commands.
  */
@@ -5591,15 +5628,22 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
                              device_guid,
                              TAP_WIN_SUFFIX);
 
-            tt->hand = CreateFile(
-                device_path,
-                GENERIC_READ | GENERIC_WRITE,
-                0,                /* was: FILE_SHARE_READ */
-                0,
-                OPEN_EXISTING,
-                FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
-                0
+            if (tt->options.msg_channel)
+            {
+                tt->hand = service_open_tun_device(tt->options.msg_channel, device_path);
+            }
+            else
+            {
+                tt->hand = CreateFile(
+                    device_path,
+                    GENERIC_READ | GENERIC_WRITE,
+                    0,                /* was: FILE_SHARE_READ */
+                    0,
+                    OPEN_EXISTING,
+                    FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
+                    0
                 );
+            }
 
             if (tt->hand == INVALID_HANDLE_VALUE)
             {
@@ -5631,15 +5675,22 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
                                  device_guid,
                                  TAP_WIN_SUFFIX);
 
-                tt->hand = CreateFile(
-                    device_path,
-                    GENERIC_READ | GENERIC_WRITE,
-                    0,                /* was: FILE_SHARE_READ */
-                    0,
-                    OPEN_EXISTING,
-                    FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
-                    0
+                if (tt->options.msg_channel)
+                {
+                    tt->hand = service_open_tun_device(tt->options.msg_channel, device_path);
+                }
+                else
+                {
+                    tt->hand = CreateFile(
+                        device_path,
+                        GENERIC_READ | GENERIC_WRITE,
+                        0,                /* was: FILE_SHARE_READ */
+                        0,
+                        OPEN_EXISTING,
+                        FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
+                        0
                     );
+                }
 
                 if (tt->hand == INVALID_HANDLE_VALUE)
                 {
