@@ -1476,12 +1476,19 @@ bool
 send_msg_iservice(HANDLE pipe, const void *data, size_t size,
                   ack_message_t *ack, const char *context)
 {
+    return send_msg_iservice_ex(pipe, data, size, ack, sizeof(*ack), context);
+}
+
+bool
+send_msg_iservice_ex(HANDLE pipe, const void *data, size_t size,
+                     void *response, size_t response_size, const char *context)
+{
     struct gc_arena gc = gc_new();
     DWORD len;
     bool ret = true;
 
     if (!WriteFile(pipe, data, size, &len, NULL)
-        || !ReadFile(pipe, ack, sizeof(*ack), &len, NULL))
+        || !ReadFile(pipe, response, response_size, &len, NULL))
     {
         msg(M_WARN, "%s: could not talk to service: %s [%lu]",
             context ? context : "Unknown",

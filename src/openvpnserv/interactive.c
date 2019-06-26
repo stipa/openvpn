@@ -58,7 +58,6 @@ static settings_t settings;
 static HANDLE rdns_semaphore = NULL;
 #define RDNS_TIMEOUT 600  /* seconds to wait for the semaphore */
 
-
 openvpn_service_t interactive_service = {
     interactive,
     TEXT(PACKAGE_NAME "ServiceInteractive"),
@@ -1198,8 +1197,70 @@ HandleEnableDHCPMessage(const enable_dhcp_message_t *dhcp)
     return err;
 }
 
+static DWORD
+HandleOpenTunDeviceMessage(const open_tun_device_message_t *open_tun, HANDLE ovpn_proc, HANDLE *remote_handle)
+{
+    DWORD err = ERROR_SUCCESS;
+    HANDLE local_handle;
+    LPWSTR device_path;
+    const WCHAR prefix[] = L"\\\\.\\Global\\";
+    const WCHAR wintun_prefix[] = L"\\\\.\\Global\\WINTUN";
+    const WCHAR tap_suffix[] = L".tap";
+    BOOL path_ok = FALSE;
+
+    *remote_handle = INVALID_HANDLE_VALUE;
+
+    device_path = utf8to16(open_tun->device_path);
+    if (!device_path)
+    {
+        err = ERROR_OUTOFMEMORY;
+        goto out;
+    }
+
+    /* ensure we open device, not file */
+    path_ok = (wcslen(device_path) > wcslen(prefix)) &&
+        (wcsncmp(device_path, prefix, wcslen(prefix)) == 0);
+
+    if (path_ok)
+    {
+        /* ensure we open path which looks like tap or wintun */
+        path_ok = (wcsncmp(device_path + wcslen(device_path) - wcslen(tap_suffix), tap_suffix, wcslen(tap_suffix)) == 0) ||
+            ((wcslen(device_path) > wcslen(wintun_prefix)) && (wcsncmp(device_path, wintun_prefix, wcslen(wintun_prefix)) == 0));
+    }
+
+    if (!path_ok)
+    {
+        err = ERROR_MESSAGE_DATA;
+        MsgToEventLog(MSG_FLAGS_ERROR, TEXT("Invalid device path (%s)"), device_path);
+        goto out;
+    }
+
+    /* open tun device */
+    local_handle = CreateFileW(device_path, GENERIC_READ | GENERIC_WRITE, 0, 0,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED, 0);
+    if (local_handle == INVALID_HANDLE_VALUE)
+    {
+        err = GetLastError();
+        MsgToEventLog(M_SYSERR, TEXT("Error opening tun device (%s)"), device_path);
+        goto out;
+    }
+
+    /* duplicate tun device handle to openvpn process */
+    if (!DuplicateHandle(GetCurrentProcess(), local_handle, ovpn_proc, remote_handle, 0, FALSE,
+                         DUPLICATE_CLOSE_SOURCE | DUPLICATE_SAME_ACCESS))
+    {
+        err = GetLastError();
+        MsgToEventLog(M_SYSERR, TEXT("Error duplicating tun device handle"));
+    }
+
+out:
+    free(device_path);
+
+    return err;
+}
+
 static VOID
-HandleMessage(HANDLE pipe, DWORD bytes, DWORD count, LPHANDLE events, undo_lists_t *lists)
+HandleMessage(HANDLE pipe, HANDLE ovpn_proc, DWORD bytes, DWORD count, LPHANDLE events, undo_lists_t *lists)
 {
     DWORD read;
     union {
@@ -1210,6 +1271,7 @@ HandleMessage(HANDLE pipe, DWORD bytes, DWORD count, LPHANDLE events, undo_lists
         block_dns_message_t block_dns;
         dns_cfg_message_t dns;
         enable_dhcp_message_t dhcp;
+        open_tun_device_message_t open_tun;
     } msg;
     ack_message_t ack = {
         .header = {
@@ -1274,6 +1336,24 @@ HandleMessage(HANDLE pipe, DWORD bytes, DWORD count, LPHANDLE events, undo_lists
             if (msg.header.size == sizeof(msg.dhcp))
             {
                 ack.error_number = HandleEnableDHCPMessage(&msg.dhcp);
+            }
+            break;
+
+        case msg_open_tun_device:
+            if (msg.header.size == sizeof(msg.open_tun))
+            {
+                open_tun_device_result_message_t res = {
+                    .header = {
+                        .type = msg_open_tun_device_result,
+                        .size = sizeof(res),
+                        .message_id = msg.header.message_id
+                    }
+                };
+                /* make sure that string passed from user process is null-terminated */
+                msg.open_tun.device_path[sizeof(msg.open_tun.device_path) - 1] = '\0';
+                res.error_number = HandleOpenTunDeviceMessage(&msg.open_tun, ovpn_proc, &res.handle);
+                WritePipeAsync(pipe, &res, sizeof(res), count, events);
+                return;
             }
             break;
 
@@ -1611,7 +1691,7 @@ RunOpenvpn(LPVOID p)
             break;
         }
 
-        HandleMessage(ovpn_pipe, bytes, 1, &exit_event, &undo_lists);
+        HandleMessage(ovpn_pipe, proc_info.hProcess, bytes, 1, &exit_event, &undo_lists);
     }
 
     WaitForSingleObject(proc_info.hProcess, IO_TIMEOUT);
