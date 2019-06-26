@@ -309,13 +309,35 @@ int win32_version_info(void);
  */
 const char *win32_version_string(struct gc_arena *gc, bool add_name);
 
-/*
- * Send the |size| bytes in buffer |data| to the interactive service |pipe|
- * and read the result in |ack|. Returns false on communication error.
- * The string in |context| is used to prefix error messages.
+
+/**
+ * Send data to interactive service and receive response of type ack_message_t.
+ *
+ * @param  pipe      The handle of communication pipe
+ * @param  data      The data to send
+ * @param  size      The size of data to send
+ * @param  ack       The pointer to ack_message_t structure to where response is written
+ * @param  context   The string used to prefix error messages
+ *
+ * @returns True on success, false on failure.
  */
 bool send_msg_iservice(HANDLE pipe, const void *data, size_t size,
                        ack_message_t *ack, const char *context);
+
+/**
+ * Send data to interactive service and receive response.
+ *
+ * @param  pipe           The handle of communication pipe
+ * @param  data           The data to send
+ * @param  size           The size of data to send
+ * @param  response       The buffer to where response is written
+ * @param  response_size  The size of response buffer
+ * @param  context        The string used to prefix error messages
+ *
+ * @returns True on success, false on failure.
+ */
+bool send_msg_iservice_ex(HANDLE pipe, const void *data, size_t size,
+                          void *response, size_t response_size, const char *context);
 
 /*
  * Attempt to simulate fork/execve on Windows
