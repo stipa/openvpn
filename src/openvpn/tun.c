@@ -5721,20 +5721,20 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
                                      TAP_WIN_SUFFIX);
                 }
 
-                if (tt->wintun)
-                {
-                    if (!impersonate_as_system())
-                    {
-                        msg(M_FATAL, "ERROR:  Failed to impersonate as SYSTEM, make sure process is running under privileged account");
-                    }
-                }
-
                 if (tt->options.msg_channel)
                 {
                     tt->hand = service_open_tun_device(tt->options.msg_channel, device_path);
                 }
                 else
                 {
+                    if (tt->wintun)
+                    {
+                        if (!impersonate_as_system())
+                        {
+                            msg(M_FATAL, "ERROR:  Failed to impersonate as SYSTEM, make sure process is running under privileged account");
+                        }
+                    }
+
                     tt->hand = CreateFile(
                         device_path,
                         GENERIC_READ | GENERIC_WRITE,
@@ -5744,13 +5744,13 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
                         FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
                         0
                     );
-                }
 
-                if (tt->wintun)
-                {
-                    if (!RevertToSelf())
+                    if (tt->wintun)
                     {
-                        msg(M_FATAL, "ERROR:  RevertToSelf error: %lu", GetLastError());
+                        if (!RevertToSelf())
+                        {
+                            msg(M_FATAL, "ERROR:  RevertToSelf error: %lu", GetLastError());
+                        }
                     }
                 }
 
