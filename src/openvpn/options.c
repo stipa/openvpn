@@ -744,6 +744,9 @@ static const char usage_message[] =
     "                       optional parameter controls the initial state of ex.\n"
     "--show-net-up   : Show " PACKAGE_NAME "'s view of routing table and net adapter list\n"
     "                  after TAP adapter is up and routes have been added.\n"
+    "--windows-driver   : Which tun driver to use?\n"
+    "                     tap-windows6 (default)\n"
+    "                     wintun\n"
 #ifdef _WIN32
     "--block-outside-dns   : Block DNS on other network adapters to prevent DNS leaks\n"
 #endif
@@ -848,6 +851,7 @@ init_options(struct options *o, const bool init_gc)
     o->tuntap_options.dhcp_masq_offset = 0;     /* use network address as internal DHCP server address */
     o->route_method = ROUTE_METHOD_ADAPTIVE;
     o->block_outside_dns = false;
+    o->wintun = false;
 #endif
 #if P2MP_SERVER
     o->real_hash_size = 256;
@@ -2935,6 +2939,12 @@ options_postprocess_mutate_invariant(struct options *options)
         options->ifconfig_noexec = false;
     }
 
+    /* for wintun kernel doesn't send DHCP requests, so use ipapi to set IP address and netmask */
+    if (options->wintun)
+    {
+        options->tuntap_options.ip_win32_type = IPW32_SET_IPAPI;
+    }
+
     remap_redirect_gateway_flags(options);
 #endif
 
@@ -3979,6 +3989,26 @@ foreign_option(struct options *o, char *argv[], int len, struct env_set *es)
         gc_free(&gc);
     }
 }
+
+#ifdef _WIN32
+bool
+parse_windows_driver(const char *str, const int msglevel)
+{
+    if (streq(str, "tap-windows6"))
+    {
+        return false;
+    }
+    else if (streq(str, "wintun"))
+    {
+        return true;
+    }
+    else
+    {
+        msg(msglevel, "--windows-driver must be tap-windows6 or wintun");
+        return false;
+    }
+}
+#endif
 
 /*
  * parse/print topology coding
@@ -5222,6 +5252,13 @@ add_option(struct options *options,
         VERIFY_PERMISSION(OPT_P_GENERAL);
         options->dev_type = p[1];
     }
+#ifdef _WIN32
+    else if (streq(p[0], "windows-driver") && p[1] && !p[2])
+    {
+        VERIFY_PERMISSION(OPT_P_GENERAL);
+        options->wintun = parse_windows_driver(p[1], M_FATAL);
+    }
+#endif
     else if (streq(p[0], "dev-node") && p[1] && !p[2])
     {
         VERIFY_PERMISSION(OPT_P_GENERAL);
