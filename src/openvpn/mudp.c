@@ -279,6 +279,20 @@ p2mp_iow_flags(const struct multi_context *m)
         flags |= IOW_READ;
     }
 
+#ifdef _WIN32
+    {
+        struct tuntap* tt = m->top.c1.tuntap;
+        if (tt && tt->wintun)
+        {
+            if (tt->send_ring->head == tt->send_ring->tail)
+            {
+                /* nothing to read from tun -> remove tun read flag set by IOW_READ */
+                flags &= ~IOW_READ_TUN;
+            }
+        }
+    }
+#endif
+
     return flags;
 }
 
