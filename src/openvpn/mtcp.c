@@ -270,7 +270,33 @@ multi_tcp_wait(const struct context *c,
 {
     int status;
     socket_set_listen_persistent(c->c2.link_socket, mtcp->es, MTCP_SOCKET);
-    tun_set(c->c1.tuntap, mtcp->es, EVENT_READ, MTCP_TUN, &mtcp->tun_rwflags);
+
+#ifdef _WIN32
+    if (c->c1.tuntap && c->c1.tuntap->wintun)
+    {
+        if (c->c1.tuntap->send_ring->head != c->c1.tuntap->send_ring->tail)
+        {
+            /* there is data in wintun ring buffer, read it immediately */
+            mtcp->esr[0].arg = MTCP_TUN;
+            mtcp->esr[0].rwflags = EVENT_READ;
+            mtcp->n_esr = 1;
+            return 1;
+        }
+        else
+        {
+            /* add ring buffer event */
+            struct rw_handle rw = { .read = c->c1.tuntap->send_tail_moved };
+            event_ctl(mtcp->es, &rw, EVENT_READ, MTCP_TUN);
+        }
+    }
+    else
+    {
+#endif
+        tun_set(c->c1.tuntap, mtcp->es, EVENT_READ, MTCP_TUN, &mtcp->tun_rwflags);
+#ifdef _WIN32
+    }
+#endif
+
 #ifdef ENABLE_MANAGEMENT
     if (management)
     {

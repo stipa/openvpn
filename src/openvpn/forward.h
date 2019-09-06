@@ -375,6 +375,19 @@ p2p_iow_flags(const struct context *c)
     {
         flags |= IOW_TO_TUN;
     }
+#ifdef _WIN32
+    {
+        struct tuntap *tt = c->c1.tuntap;
+        if (tt && tt->wintun)
+        {
+            if (tt->send_ring->head == tt->send_ring->tail)
+            {
+                /* nothing to read from tun -> remove tun read flag set by IOW_READ */
+                flags &= ~IOW_READ_TUN;
+            }
+        }
+    }
+#endif
     return flags;
 }
 
@@ -403,8 +416,38 @@ io_wait(struct context *c, const unsigned int flags)
     }
     else
     {
-        /* slow path */
-        io_wait_dowork(c, flags);
+#ifdef _WIN32
+        bool skip_iowait = flags & IOW_TO_TUN;
+        if (flags & IOW_READ_TUN)
+        {
+            /*
+             * don't read from tun if we have pending write to link,
+             * since every tun read overwrites to_link buffer filled
+             * by previous tun read
+             */
+            skip_iowait = !(flags & IOW_TO_LINK);
+        }
+        if (c->c1.tuntap && c->c1.tuntap->wintun && skip_iowait)
+        {
+            unsigned int ret = 0;
+            if (flags & IOW_TO_TUN)
+            {
+                ret |= TUN_WRITE;
+            }
+            if (flags & IOW_READ_TUN)
+            {
+                ret |= TUN_READ;
+            }
+            c->c2.event_set_status = ret;
+        }
+        else
+        {
+#endif
+            /* slow path */
+            io_wait_dowork(c, flags);
+#ifdef _WIN32
+        }
+#endif
     }
 }
 

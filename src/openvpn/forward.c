@@ -1256,12 +1256,30 @@ read_incoming_tun(struct context *c)
     perf_push(PERF_READ_IN_TUN);
 
     c->c2.buf = c->c2.buffers->read_tun_buf;
+
 #ifdef _WIN32
-    read_tun_buffered(c->c1.tuntap, &c->c2.buf);
+    if (c->c1.tuntap->wintun)
+    {
+        read_wintun(c->c1.tuntap, &c->c2.buf);
+        if (c->c2.buf.len == -1)
+        {
+            register_signal(c, SIGHUP, "tun-abort");
+            c->persist.restart_sleep_seconds = 1;
+            msg(M_INFO, "Wintun read error, restarting");
+            perf_pop();
+            return;
+        }
+    }
+    else
+    {
+        read_tun_buffered(c->c1.tuntap, &c->c2.buf);
 #else
-    ASSERT(buf_init(&c->c2.buf, FRAME_HEADROOM(&c->c2.frame)));
-    ASSERT(buf_safe(&c->c2.buf, MAX_RW_SIZE_TUN(&c->c2.frame)));
-    c->c2.buf.len = read_tun(c->c1.tuntap, BPTR(&c->c2.buf), MAX_RW_SIZE_TUN(&c->c2.frame));
+        ASSERT(buf_init(&c->c2.buf, FRAME_HEADROOM(&c->c2.frame)));
+        ASSERT(buf_safe(&c->c2.buf, MAX_RW_SIZE_TUN(&c->c2.frame)));
+        c->c2.buf.len = read_tun(c->c1.tuntap, BPTR(&c->c2.buf), MAX_RW_SIZE_TUN(&c->c2.frame));
+#endif
+#ifdef _WIN32
+    }
 #endif
 
 #ifdef PACKET_TRUNCATION_CHECK
@@ -2103,7 +2121,21 @@ io_wait_dowork(struct context *c, const unsigned int flags)
      * Configure event wait based on socket, tuntap flags.
      */
     socket_set(c->c2.link_socket, c->c2.event_set, socket, (void *)&socket_shift, NULL);
-    tun_set(c->c1.tuntap, c->c2.event_set, tuntap, (void *)&tun_shift, NULL);
+
+#ifdef _WIN32
+    if (c->c1.tuntap && c->c1.tuntap->wintun)
+    {
+        /* add ring buffer event */
+        struct rw_handle rw = {.read = c->c1.tuntap->send_tail_moved };
+        event_ctl(c->c2.event_set, &rw, EVENT_READ, (void *)&tun_shift);
+    }
+    else
+    {
+#endif
+        tun_set(c->c1.tuntap, c->c2.event_set, tuntap, (void *)&tun_shift, NULL);
+#ifdef _WIN32
+    }
+#endif
 
 #ifdef ENABLE_MANAGEMENT
     if (management)
