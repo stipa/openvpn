@@ -799,17 +799,26 @@ init_tun_post(struct tuntap *tt,
     tt->rw_handle.write = tt->writes.overlapped.hEvent;
     tt->adapter_index = TUN_ADAPTER_INDEX_INVALID;
 
-    tt->send_ring = malloc(sizeof(struct tun_ring));
-    tt->receive_ring = malloc(sizeof(struct tun_ring));
-    if ((tt->send_ring == NULL) || (tt->receive_ring == NULL))
+    if (tt->wintun)
     {
-        msg(M_FATAL, "Cannot allocate memory for receive ring");
-    }
-    ZeroMemory(tt->send_ring, sizeof(struct tun_ring));
-    ZeroMemory(tt->receive_ring, sizeof(struct tun_ring));
+        tt->send_ring_handle = CreateFileMapping(INVALID_HANDLE_VALUE, NULL,
+                                                 PAGE_READWRITE, 0, sizeof(struct tun_ring), NULL);
+        tt->receive_ring_handle = CreateFileMapping(INVALID_HANDLE_VALUE, NULL,
+                                                    PAGE_READWRITE, 0, sizeof(struct tun_ring), NULL);
 
-    tt->send_tail_moved = CreateEvent(NULL, FALSE, FALSE, NULL);
-    tt->receive_tail_moved = CreateEvent(NULL, FALSE, FALSE, NULL);
+        if ((tt->send_ring_handle == NULL) || (tt->receive_ring_handle == NULL))
+        {
+            msg(M_FATAL, "Cannot allocate memory for ring buffer");
+        }
+
+        tt->send_tail_moved = CreateEvent(NULL, FALSE, FALSE, NULL);
+        tt->receive_tail_moved = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+        if ((tt->send_tail_moved == NULL) || (tt->receive_tail_moved == NULL))
+        {
+            msg(M_FATAL, "Cannot create events for ring buffer");
+        }
+    }
 #endif
 }
 
@@ -5628,6 +5637,44 @@ register_dns_service(const struct tuntap *tt)
     gc_free(&gc);
 }
 
+static void
+service_register_ring_buffers(const struct tuntap *tt)
+{
+    HANDLE msg_channel = tt->options.msg_channel;
+    ack_message_t ack;
+    struct gc_arena gc = gc_new();
+
+    register_ring_buffers_message_t msg = {
+        .header = {
+            msg_register_ring_buffers,
+            sizeof(register_ring_buffers_message_t),
+            0
+        },
+        .device = tt->hand,
+        .send_ring_handle = tt->send_ring_handle,
+        .receive_ring_handle = tt->receive_ring_handle,
+        .send_tail_moved = tt->send_tail_moved,
+        .receive_tail_moved = tt->receive_tail_moved
+    };
+
+    if (!send_msg_iservice(msg_channel, &msg, sizeof(msg), &ack, "Register ring buffers"))
+    {
+        gc_free(&gc);
+        return;
+    }
+    else if (ack.error_number != NO_ERROR)
+    {
+        msg(M_FATAL, "Register ring buffers failed using service: %s [status=0x%x]",
+            strerror_win32(ack.error_number, &gc), ack.error_number);
+    }
+    else
+    {
+        msg(M_INFO, "Ring buffers registered via service");
+    }
+
+    gc_free(&gc);
+}
+
 void
 fork_register_dns_action(struct tuntap *tt)
 {
@@ -6222,9 +6269,12 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
 
     if (tt->wintun)
     {
+        tt->send_ring = (struct tun_ring *)MapViewOfFile(tt->send_ring_handle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct tun_ring));
+        tt->receive_ring = (struct tun_ring *)MapViewOfFile(tt->receive_ring_handle, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(struct tun_ring));
+
         if (tt->options.msg_channel)
         {
-            /* TODO */
+            service_register_ring_buffers(tt);
         }
         else
         {
@@ -6381,14 +6431,23 @@ close_tun(struct tuntap *tt, openvpn_net_ctx_t *ctx)
         free(tt->actual_name);
     }
 
-    CloseHandle(tt->receive_tail_moved);
     CloseHandle(tt->send_tail_moved);
+    CloseHandle(tt->receive_tail_moved);
 
-    free(tt->receive_ring);
-    free(tt->send_ring);
+    if (tt->send_ring != NULL)
+    {
+        UnmapViewOfFile(tt->send_ring);
+        tt->send_ring = NULL;
+    }
 
-    tt->receive_ring = NULL;
-    tt->send_ring = NULL;
+    if (tt->receive_ring != NULL)
+    {
+        UnmapViewOfFile(tt->receive_ring);
+        tt->receive_ring = NULL;
+    }
+
+    CloseHandle(tt->send_ring_handle);
+    CloseHandle(tt->receive_ring_handle);
 
     clear_tuntap(tt);
     free(tt);
