@@ -47,5 +47,4 @@ tapctl_SOURCES = \
 	basic.h \
 	error.c error.h \
 	main.c \
-	tap.c tap.h \
-	tapctl_resources.rc
+	tap.c tap.h
