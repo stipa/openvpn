@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eux
 
+if [ "${TRAVIS_OS_NAME}" = "windows" ]; then
+    choco install strawberryperl nasm
+    cd ..
+    git clone https://github.com/lstipakov/openvpn-build.git
+    cd openvpn-build
+    git checkout feature/travis-win
+    PATH="/c/Program Files/NASM:/c/Strawberry/perl/bin:":$PATH MODE=DEPS msvc/build.bat
+    exit 0
+fi
+
 # Set defaults
 PREFIX="${PREFIX:-${HOME}/opt}"
 

@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eux
 
+if [ "${TRAVIS_OS_NAME}" = "windows" ]; then
+	PATH="/c/Program Files (x86)/Microsoft Visual Studio/2017/BuildTools/MSBuild/15.0/Bin/":$PATH
+	MSBuild.exe openvpn.sln && exit 0
+fi
+
 if [ "${TRAVIS_OS_NAME}" = "linux" ]; then
 	export LD_LIBRARY_PATH="${PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 fi

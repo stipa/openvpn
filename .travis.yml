@@ -24,6 +24,15 @@ env:
 
 matrix:
   include:
+    - env:
+      - SSLLIB="openssl"
+      - VCHOME="/c/Program Files (x86)/Microsoft Visual Studio/2017/BuildTools/VC"
+      - P7Z="c:\Program Files\7-Zip\7z.exe"
+      - PERL="c:\Strawberry\perl\bin\perl.exe"
+      - OPENSSL_VERSION=1.1.0j
+      - CC="cl"
+      os: windows
+      compiler: cl
     - env: SSLLIB="openssl" RUN_COVERITY="1"
       os: linux
       compiler: gcc
