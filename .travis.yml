@@ -24,6 +24,13 @@ env:
 
 matrix:
   include:
+    - env:
+      - SSLLIB="openssl"
+      - OPENSSL_VERSION="1.1.1d"
+      - P7Z="c:\Program Files\7-Zip\7z.exe"
+      - CC="cl"
+      os: windows
+      compiler: cl
     - env: SSLLIB="openssl" RUN_COVERITY="1"
       os: linux
       compiler: gcc
@@ -89,7 +96,11 @@ cache:
 
 install:
   - if [ ! -z "${CHOST}" ]; then unset CC; fi
+  # Output something every 1 minute or Travis kills the job
+  - while sleep 60; do echo "=====[ $SECONDS seconds still running ]====="; done &
   - .travis/build-deps.sh > build-deps.log 2>&1 || (cat build-deps.log && exit 1)
+  # Killing background sleep loop
+  - kill %1
 
 before_script:
   - .travis/coverity.sh
