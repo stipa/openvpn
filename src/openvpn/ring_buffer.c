@@ -35,6 +35,7 @@ register_ring_buffers(HANDLE device,
 {
     struct tun_register_rings rr;
     BOOL res;
+    DWORD bytes_returned;
 
     ZeroMemory(&rr, sizeof(rr));
 
@@ -46,7 +47,8 @@ register_ring_buffers(HANDLE device,
     rr.receive.ring_size = sizeof(receive_ring->data);
     rr.receive.tail_moved = receive_tail_moved;
 
-    res = DeviceIoControl(device, TUN_IOCTL_REGISTER_RINGS, &rr, sizeof(rr), NULL, 0, NULL, NULL);
+    res = DeviceIoControl(device, TUN_IOCTL_REGISTER_RINGS, &rr, sizeof(rr),
+        NULL, 0, &bytes_returned, NULL);
 
     return res == TRUE;
 }
