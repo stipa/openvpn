@@ -3994,10 +3994,10 @@ show_tap_win_adapters(int msglev, int warnlev)
 }
 
 /*
- * Confirm that GUID is a TAP-Windows adapter.
+ * Lookup a TAP-Windows or Wintun adapter by GUID.
  */
-static bool
-is_tap_win(const char *guid, const struct tap_reg *tap_reg)
+static const struct tap_reg *
+get_tap_by_guid(const char *guid, const struct tap_reg *tap_reg)
 {
     const struct tap_reg *tr;
 
@@ -4005,11 +4005,11 @@ is_tap_win(const char *guid, const struct tap_reg *tap_reg)
     {
         if (guid && !strcmp(tr->guid, guid))
         {
-            return true;
+            return tr;
         }
     }
 
-    return false;
+    return NULL;
 }
 
 static const char *
@@ -4028,16 +4028,16 @@ guid_to_name(const char *guid, const struct panel_reg *panel_reg)
     return NULL;
 }
 
-static const char *
-name_to_guid(const char *name, const struct tap_reg *tap_reg, const struct panel_reg *panel_reg)
+static const struct tap_reg *
+get_tap_by_name(const char *name, const struct tap_reg *tap_reg, const struct panel_reg *panel_reg)
 {
     const struct panel_reg *pr;
 
     for (pr = panel_reg; pr != NULL; pr = pr->next)
     {
-        if (name && !strcmp(pr->name, name) && is_tap_win(pr->guid, tap_reg))
+        if (name && !strcmp(pr->name, name))
         {
-            return pr->guid;
+            return get_tap_by_guid(pr->guid, tap_reg);
         }
     }
 
@@ -4049,7 +4049,7 @@ at_least_one_tap_win(const struct tap_reg *tap_reg)
 {
     if (!tap_reg)
     {
-        msg(M_FATAL, "There are no TAP-Windows adapters on this system.  You should be able to create a TAP-Windows adapter by going to Start -> All Programs -> TAP-Windows -> Utilities -> Add a new TAP-Windows virtual ethernet adapter.");
+        msg(M_FATAL, "There are no TAP-Windows nor Wintun adapters on this system.  You should be able to create an adapter by using tapctl.exe utility.");
     }
 }
 
@@ -4128,12 +4128,14 @@ static const char *
 get_device_guid(const char *name,
                 char *actual_name,
                 int actual_name_size,
+                bool *wintun,
                 const struct tap_reg *tap_reg,
                 const struct panel_reg *panel_reg,
                 struct gc_arena *gc)
 {
     struct buffer ret = alloc_buf_gc(256, gc);
     struct buffer actual = clear_buf();
+    const struct tap_reg *tr;
 
     /* Make sure we have at least one TAP adapter */
     if (!tap_reg)
@@ -4148,8 +4150,15 @@ get_device_guid(const char *name,
         buf_set_write(&actual, actual_name, actual_name_size);
     }
 
+    /* The is_wintun may be NULL */
+    if (wintun)
+    {
+        *wintun = false;
+    }
+
     /* Check if GUID was explicitly specified as --dev-node parameter */
-    if (is_tap_win(name, tap_reg))
+    tr = get_tap_by_guid(name, tap_reg);
+    if (tr)
     {
         const char *act = guid_to_name(name, panel_reg);
         buf_printf(&ret, "%s", name);
@@ -4161,16 +4170,24 @@ get_device_guid(const char *name,
         {
             buf_printf(&actual, "%s", name);
         }
+        if (wintun)
+        {
+            *wintun = tr->wintun;
+        }
         return BSTR(&ret);
     }
 
     /* Lookup TAP adapter in network connections list */
     {
-        const char *guid = name_to_guid(name, tap_reg, panel_reg);
-        if (guid)
+        tr = get_tap_by_name(name, tap_reg, panel_reg);
+        if (tr)
         {
             buf_printf(&actual, "%s", name);
-            buf_printf(&ret, "%s", guid);
+            if (wintun)
+            {
+                *wintun = tr->wintun;
+            }
+            buf_printf(&ret, "%s", tr->guid);
             return BSTR(&ret);
         }
     }
@@ -4714,11 +4731,14 @@ get_adapter_index_flexible(const char *name)  /* actual name or GUID */
     {
         const struct tap_reg *tap_reg = get_tap_reg(&gc);
         const struct panel_reg *panel_reg = get_panel_reg(&gc);
-        const char *guid = name_to_guid(name, tap_reg, panel_reg);
-        index = get_adapter_index_method_1(guid);
-        if (index == TUN_ADAPTER_INDEX_INVALID)
+        const struct tap_reg *tr = get_tap_by_name(name, tap_reg, panel_reg);
+        if (tr)
         {
-            index = get_adapter_index_method_2(guid);
+            index = get_adapter_index_method_1(tr->guid);
+            if (index == TUN_ADAPTER_INDEX_INVALID)
+            {
+                index = get_adapter_index_method_2(tr->guid);
+            }
         }
     }
     if (index == TUN_ADAPTER_INDEX_INVALID)
@@ -4851,7 +4871,7 @@ tap_allow_nonadmin_access(const char *dev_node)
     if (dev_node)
     {
         /* Get the device GUID for the device specified with --dev-node. */
-        device_guid = get_device_guid(dev_node, actual_buffer, sizeof(actual_buffer), tap_reg, panel_reg, &gc);
+        device_guid = get_device_guid(dev_node, actual_buffer, sizeof(actual_buffer), NULL, tap_reg, panel_reg, &gc);
 
         if (!device_guid)
         {
@@ -5425,7 +5445,7 @@ netsh_get_id(const char *dev_node, struct gc_arena *gc)
 
     if (dev_node)
     {
-        guid = get_device_guid(dev_node, BPTR(&actual), BCAP(&actual), tap_reg, panel_reg, gc);
+        guid = get_device_guid(dev_node, BPTR(&actual), BCAP(&actual), NULL, tap_reg, panel_reg, gc);
     }
     else
     {
@@ -5651,11 +5671,12 @@ register_dns_service(const struct tuntap *tt)
     gc_free(&gc);
 }
 
-static void
+static bool
 service_register_ring_buffers(const struct tuntap *tt)
 {
     HANDLE msg_channel = tt->options.msg_channel;
     ack_message_t ack;
+    bool ret = true;
     struct gc_arena gc = gc_new();
 
     register_ring_buffers_message_t msg = {
@@ -5673,13 +5694,13 @@ service_register_ring_buffers(const struct tuntap *tt)
 
     if (!send_msg_iservice(msg_channel, &msg, sizeof(msg), &ack, "Register ring buffers"))
     {
-        gc_free(&gc);
-        return;
+        ret = false;
     }
     else if (ack.error_number != NO_ERROR)
     {
-        msg(M_FATAL, "Register ring buffers failed using service: %s [status=0x%x]",
+        msg(M_NONFATAL, "Register ring buffers failed using service: %s [status=0x%x]",
             strerror_win32(ack.error_number, &gc), ack.error_number);
+        ret = false;
     }
     else
     {
@@ -5687,6 +5708,7 @@ service_register_ring_buffers(const struct tuntap *tt)
     }
 
     gc_free(&gc);
+    return ret;
 }
 
 void
@@ -5926,9 +5948,11 @@ tuntap_set_ip_addr(struct tuntap *tt,
     gc_free(&gc);
 }
 
-static void
+static bool
 wintun_register_ring_buffer(struct tuntap *tt)
 {
+    bool ret = true;
+
     tt->wintun_send_ring = (struct tun_ring *)MapViewOfFile(tt->wintun_send_ring_handle,
                                                             FILE_MAP_ALL_ACCESS,
                                                             0,
@@ -5943,7 +5967,7 @@ wintun_register_ring_buffer(struct tuntap *tt)
 
     if (tt->options.msg_channel)
     {
-        service_register_ring_buffers(tt);
+        ret = service_register_ring_buffers(tt);
     }
     else
     {
@@ -5957,13 +5981,16 @@ wintun_register_ring_buffer(struct tuntap *tt)
             tt->rw_handle.read,
             tt->rw_handle.write))
         {
-            msg(M_FATAL, "ERROR:  Failed to register ring buffers: %lu", GetLastError());
+            msg(M_NONFATAL, "Failed to register ring buffers: %lu", GetLastError());
+            ret = false;
         }
         if (!RevertToSelf())
         {
             msg(M_FATAL, "ERROR:  RevertToSelf error: %lu", GetLastError());
         }
     }
+
+    return ret;
 }
 
 static void
@@ -6126,12 +6153,71 @@ tuntap_dhcp_mask(const struct tuntap *tt, const char *device_guid)
     gc_free(&gc);
 }
 
+static bool
+tun_try_open_device(struct tuntap *tt, const char **device_guid, const struct device_instance_id_interface *device_instance_id_interface)
+{
+    const char *path = NULL;
+    char tuntap_device_path[256];
+
+    if (tt->wintun)
+    {
+        const struct device_instance_id_interface *dev_if;
+
+        /* Open Wintun adapter */
+        for (dev_if = device_instance_id_interface; dev_if != NULL; dev_if = dev_if->next)
+        {
+            if (strcmp(dev_if->net_cfg_instance_id, *device_guid) == 0)
+            {
+                path = dev_if->device_interface_list;
+                break;
+            }
+        }
+        if (path == NULL)
+        {
+            return false;
+        }
+    }
+    else
+    {
+        /* Open TAP-Windows adapter */
+        openvpn_snprintf(tuntap_device_path, sizeof(tuntap_device_path), "%s%s%s",
+                            USERMODEDEVICEDIR,
+                            *device_guid,
+                            TAP_WIN_SUFFIX);
+        path = tuntap_device_path;
+    }
+
+    tt->hand = CreateFile(path,
+                          GENERIC_READ | GENERIC_WRITE,
+                          0,                /* was: FILE_SHARE_READ */
+                          0,
+                          OPEN_EXISTING,
+                          FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
+                          0);
+
+    if (tt->hand == INVALID_HANDLE_VALUE)
+    {
+        msg(D_TUNTAP_INFO, "CreateFile failed on %s device: %s", tt->wintun ? "Wintun" : "TAP-Windows", path);
+        return false;
+    }
+
+    if (tt->wintun)
+    {
+        /* Wintun adapter may be considered "open" after ring buffers are successfuly registered. */
+        if (!wintun_register_ring_buffer(tt))
+        {
+            msg(D_TUNTAP_INFO, "Failed to register %s adapter ring buffers", *device_guid);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static void
 tun_open_device(struct tuntap *tt, const char *dev_node, const char **device_guid)
 {
     struct gc_arena gc = gc_new();
-    char *path = NULL;
-    char tuntap_device_path[256];
     const struct tap_reg* tap_reg = get_tap_reg(&gc);
     const struct panel_reg* panel_reg = get_panel_reg(&gc);
     const struct device_instance_id_interface* device_instance_id_interface = get_device_instance_id_interface(&gc);
@@ -6144,31 +6230,34 @@ tun_open_device(struct tuntap *tt, const char *dev_node, const char **device_gui
      */
     if (dev_node)
     {
+        bool is_picked_device_wintun = false;
+
         /* Get the device GUID for the device specified with --dev-node. */
-        *device_guid = get_device_guid(dev_node, actual_buffer, sizeof(actual_buffer), tap_reg, panel_reg, &gc);
+        *device_guid = get_device_guid(dev_node, actual_buffer, sizeof(actual_buffer), &is_picked_device_wintun, tap_reg, panel_reg, &gc);
 
         if (!*device_guid)
         {
-            msg(M_FATAL, "TAP-Windows adapter '%s' not found", dev_node);
+            msg(M_FATAL, "Adapter '%s' not found", dev_node);
         }
 
-        /* Open Windows TAP-Windows adapter */
-        openvpn_snprintf(tuntap_device_path, sizeof(tuntap_device_path), "%s%s%s",
-                         USERMODEDEVICEDIR,
-                         *device_guid,
-                         TAP_WIN_SUFFIX);
-
-        tt->hand = CreateFile(tuntap_device_path,
-                              GENERIC_READ | GENERIC_WRITE,
-                              0,                /* was: FILE_SHARE_READ */
-                              0,
-                              OPEN_EXISTING,
-                              FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
-                              0);
-
-        if (tt->hand == INVALID_HANDLE_VALUE)
+        if (tt->wintun)
         {
-            msg(M_ERR, "CreateFile failed on TAP device: %s", tuntap_device_path);
+            if (!is_picked_device_wintun)
+            {
+                msg(M_FATAL, "Adapter '%s' is TAP-Windows, Wintun expected", dev_node);
+            }
+        }
+        else
+        {
+            if (is_picked_device_wintun)
+            {
+                msg(M_FATAL, "Adapter '%s' is Wintun, TAP-Windows expected", dev_node);
+            }
+        }
+
+        if (!tun_try_open_device(tt, device_guid, device_instance_id_interface))
+        {
+            msg(M_FATAL, "Failed to open %s adapter: %s", tt->wintun ? "Wintun" : "TAP-Windows", dev_node);
         }
     }
     else
@@ -6194,25 +6283,9 @@ tun_open_device(struct tuntap *tt, const char *dev_node, const char **device_gui
 
             if (tt->wintun)
             {
-                const struct device_instance_id_interface* dev_if;
-
                 if (!is_picked_device_wintun)
                 {
                     /* wintun driver specified but picked adapter is not wintun, proceed to next one */
-                    goto next;
-                }
-
-                path = NULL;
-                for (dev_if = device_instance_id_interface; dev_if != NULL; dev_if = dev_if->next)
-                {
-                    if (strcmp(dev_if->net_cfg_instance_id, *device_guid) == 0)
-                    {
-                        path = (char*)dev_if->device_interface_list;
-                        break;
-                    }
-                }
-                if (path == NULL)
-                {
                     goto next;
                 }
             }
@@ -6223,28 +6296,9 @@ tun_open_device(struct tuntap *tt, const char *dev_node, const char **device_gui
                     /* tap-windows6 driver specified but picked adapter is wintun, proceed to next one */
                     goto next;
                 }
-
-                /* Open Windows TAP-Windows adapter */
-                openvpn_snprintf(tuntap_device_path, sizeof(tuntap_device_path), "%s%s%s",
-                                 USERMODEDEVICEDIR,
-                                 *device_guid,
-                                 TAP_WIN_SUFFIX);
-                path = tuntap_device_path;
             }
 
-            tt->hand = CreateFile(path,
-                                  GENERIC_READ | GENERIC_WRITE,
-                                  0,                /* was: FILE_SHARE_READ */
-                                  0,
-                                  OPEN_EXISTING,
-                                  FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
-                                  0);
-
-            if (tt->hand == INVALID_HANDLE_VALUE)
-            {
-                msg(D_TUNTAP_INFO, "CreateFile failed on %s device: %s", tt->wintun ? "wintun" : "TAP", tuntap_device_path);
-            }
-            else
+            if (tun_try_open_device(tt, device_guid, device_instance_id_interface))
             {
                 break;
             }
@@ -6258,7 +6312,7 @@ tun_open_device(struct tuntap *tt, const char *dev_node, const char **device_gui
      * GUID using the registry */
     tt->actual_name = string_alloc(actual_buffer, NULL);
 
-    msg(M_INFO, "%s device [%s] opened: %s", tt->wintun ? "Wintun" : "TAP-WIN32", tt->actual_name, path);
+    msg(M_INFO, "%s device [%s] opened", tt->wintun ? "Wintun" : "TAP-Windows", tt->actual_name);
     tt->adapter_index = get_adapter_index(*device_guid);
 
     gc_free(&gc);
@@ -6369,11 +6423,7 @@ open_tun(const char *dev, const char *dev_type, const char *dev_node, struct tun
 
     tun_open_device(tt, dev_node, &device_guid);
 
-    if (tt->wintun)
-    {
-        wintun_register_ring_buffer(tt);
-    }
-    else
+    if (!tt->wintun)
     {
         tuntap_post_open(tt, device_guid);
     }
