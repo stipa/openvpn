@@ -50,7 +50,7 @@ register_ring_buffers(HANDLE device,
     res = DeviceIoControl(device, TUN_IOCTL_REGISTER_RINGS, &rr, sizeof(rr),
                           NULL, 0, &bytes_returned, NULL);
 
-    return res == TRUE;
+    return res != FALSE;
 }
 
 #endif /* ifdef _WIN32 */
