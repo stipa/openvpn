@@ -40,11 +40,11 @@ register_ring_buffers(HANDLE device,
     ZeroMemory(&rr, sizeof(rr));
 
     rr.send.ring = send_ring;
-    rr.send.ring_size = sizeof(send_ring->data);
+    rr.send.ring_size = sizeof(struct tun_ring);
     rr.send.tail_moved = send_tail_moved;
 
     rr.receive.ring = receive_ring;
-    rr.receive.ring_size = sizeof(receive_ring->data);
+    rr.receive.ring_size = sizeof(struct tun_ring);
     rr.receive.tail_moved = receive_tail_moved;
 
     res = DeviceIoControl(device, TUN_IOCTL_REGISTER_RINGS, &rr, sizeof(rr),

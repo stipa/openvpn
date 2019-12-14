@@ -38,7 +38,6 @@
  */
 #define WINTUN_RING_CAPACITY        0x800000
 #define WINTUN_RING_TRAILING_BYTES  0x10000
-#define WINTUN_RING_FRAMING_SIZE    12
 #define WINTUN_MAX_PACKET_SIZE      0xffff
 #define WINTUN_PACKET_ALIGN         4
 
@@ -53,7 +52,7 @@ struct tun_ring
     volatile ULONG head;
     volatile ULONG tail;
     volatile LONG alertable;
-    UCHAR data[WINTUN_RING_CAPACITY + WINTUN_RING_TRAILING_BYTES + WINTUN_RING_FRAMING_SIZE];
+    UCHAR data[WINTUN_RING_CAPACITY + WINTUN_RING_TRAILING_BYTES];
 };
 
 /**
