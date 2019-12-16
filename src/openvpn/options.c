@@ -1240,8 +1240,10 @@ print_vlan_accept(enum vlan_acceptable_frames mode)
     {
         case VLAN_ONLY_TAGGED:
             return "tagged";
+
         case VLAN_ONLY_UNTAGGED_OR_PRIORITY:
             return "untagged";
+
         case VLAN_ALL:
             return "all";
     }
@@ -1319,7 +1321,7 @@ show_p2mp_parms(const struct options *o)
     SHOW_STR(port_share_port);
 #endif
     SHOW_BOOL(vlan_tagging);
-    msg(D_SHOW_PARMS, "  vlan_accept = %s", print_vlan_accept (o->vlan_accept));
+    msg(D_SHOW_PARMS, "  vlan_accept = %s", print_vlan_accept(o->vlan_accept));
     SHOW_INT(vlan_pvid);
 #endif /* P2MP_SERVER */
 
@@ -3023,7 +3025,7 @@ options_postprocess_mutate_invariant(struct options *options)
     }
 
     remap_redirect_gateway_flags(options);
-#endif
+#endif /* ifdef _WIN32 */
 
 #if P2MP_SERVER
     /*
@@ -5287,7 +5289,7 @@ add_option(struct options *options,
         options->management_flags |= MF_EXTERNAL_CERT;
         options->management_certificate = p[1];
     }
-#endif
+#endif /* ifdef ENABLE_MANAGEMENT */
 #ifdef MANAGEMENT_DEF_AUTH
     else if (streq(p[0], "management-client-auth") && !p[1])
     {
@@ -7697,8 +7699,8 @@ add_option(struct options *options,
         }
         else
         {
-            if (streq(p[1], "secret") || streq(p[1], "tls-auth") ||
-                streq(p[1], "tls-crypt"))
+            if (streq(p[1], "secret") || streq(p[1], "tls-auth")
+                || streq(p[1], "tls-crypt"))
             {
                 options->genkey_type = GENKEY_SECRET;
             }

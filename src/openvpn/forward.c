@@ -1274,7 +1274,7 @@ read_incoming_tun(struct context *c)
     {
         read_tun_buffered(c->c1.tuntap, &c->c2.buf);
     }
-#else
+#else  /* ifdef _WIN32 */
     ASSERT(buf_init(&c->c2.buf, FRAME_HEADROOM(&c->c2.frame)));
     ASSERT(buf_safe(&c->c2.buf, MAX_RW_SIZE_TUN(&c->c2.frame)));
     c->c2.buf.len = read_tun(c->c1.tuntap, BPTR(&c->c2.buf), MAX_RW_SIZE_TUN(&c->c2.frame));
