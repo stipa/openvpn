@@ -1918,7 +1918,6 @@ bool
 tls_item_in_cipher_list(const char *item, const char *list)
 {
     char *tmp_ciphers = string_alloc(list, NULL);
-    char *tmp_ciphers_orig = tmp_ciphers;
 
     const char *token = strtok(tmp_ciphers, ":");
     while (token)
@@ -1929,9 +1928,11 @@ tls_item_in_cipher_list(const char *item, const char *list)
         }
         token = strtok(NULL, ":");
     }
-    free(tmp_ciphers_orig);
 
-    return token != NULL;
+    bool found = token != NULL;
+    free(tmp_ciphers);
+
+    return found;
 }
 
 void
