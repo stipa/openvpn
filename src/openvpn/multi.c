@@ -2555,7 +2555,7 @@ multi_process_incoming_link(struct multi_context *m, struct multi_instance *inst
             orig_buf = c->c2.buf.data;
             if (process_incoming_link_part1(c, lsi, floated))
             {
-                if (floated)
+                if (floated && c->c2.buf.len > 0)
                 {
                     multi_process_float(m, m->pending);
                 }
