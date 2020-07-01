@@ -2624,6 +2624,16 @@ multi_process_file_closed(struct multi_context *m, const unsigned int mpp_flags)
                 /* continue authentication, perform NCP negotiation and send push_reply */
                 multi_process_post(m, mi, mpp_flags);
 
+                if (mi->client_connect_status != CC_STATUS_ESTABLISHED)
+                {
+                    msg(D_MULTI_DEBUG, "multi_process_file_closed: client_connect_status not CC_STATUS_ESTABLISHED, skip data channel key generation");
+                    continue;
+                }
+                if (!mi->context.c2.push_request_received)
+                {
+                    msg(D_MULTI_DEBUG, "multi_process_file_closed: not received push request, skip data channel key generation");
+                    continue;
+                }
                 /* With NCP and deferred authentication, we perform cipher negotiation and
                  * data channel keys generation on incoming push request, assuming that auth
                  * succeeded. When auth succeeds in between push requests and async push is used,
@@ -2638,6 +2648,7 @@ multi_process_file_closed(struct multi_context *m, const unsigned int mpp_flags)
                     frame_fragment = &c->c2.frame_fragment;
                 }
 #endif
+                msg(D_MULTI_DEBUG, "multi_process_file_closed: generate data channel keys");
                 struct tls_session *session = &c->c2.tls_multi->session[TM_ACTIVE];
                 if (!tls_session_update_crypto_params(session, &c->options,
                                                       &c->c2.frame, frame_fragment))
