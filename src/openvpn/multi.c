@@ -828,8 +828,6 @@ multi_create_instance(struct multi_context *m, const struct mroute_addr *real)
     mi->did_cid_hash = true;
 #endif
 
-    mi->context.c2.push_reply_deferred = true;
-
 #ifdef ENABLE_ASYNC_PUSH
     mi->context.c2.push_request_received = false;
     mi->inotify_watch = -1;
@@ -2109,11 +2107,6 @@ script_failed:
 
         gc_free(&gc);
     }
-
-    /*
-     * Reply now to client's PUSH_REQUEST query
-     */
-    mi->context.c2.push_reply_deferred = false;
 }
 
 #ifdef ENABLE_ASYNC_PUSH
