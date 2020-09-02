@@ -1094,15 +1094,6 @@ ProcessDeferredAction(_In_ MSIHANDLE hInstall)
 
             GUID guidAdapter;
             dwResult = tap_create_adapter(NULL, NULL, szHardwareId, &bRebootRequired, &guidAdapter);
-            if (dwResult == ERROR_SUCCESS)
-            {
-                /* Set adapter name. */
-                dwResult = tap_set_adapter_name(&guidAdapter, szName);
-                if (dwResult != ERROR_SUCCESS)
-                {
-                    tap_delete_adapter(NULL, &guidAdapter, &bRebootRequired);
-                }
-            }
         }
         else if (wcsncmp(szArg[i], L"deleteN=", 8) == 0)
         {
