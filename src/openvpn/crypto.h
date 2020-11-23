@@ -168,6 +168,9 @@ struct key_ctx
     uint8_t implicit_iv[OPENVPN_MAX_IV_LENGTH];
     /**< The implicit part of the IV */
     size_t implicit_iv_len;     /**< The length of implicit_iv */
+#if defined(ENABLE_DCO)
+    uint8_t aead_key[MAX_CIPHER_KEY_LENGTH];
+#endif
 };
 
 #define KEY_DIRECTION_BIDIRECTIONAL 0 /* same keys for both directions */
