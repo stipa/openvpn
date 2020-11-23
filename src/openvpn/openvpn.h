@@ -232,6 +232,7 @@ struct context_2
     int event_set_max;
     bool event_set_owned;
 
+
     /* bitmask for event status. Check event.h for possible values */
     unsigned int event_set_status;
 

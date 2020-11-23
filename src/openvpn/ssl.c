@@ -2240,7 +2240,7 @@ push_peer_info(struct buffer *buf, struct tls_session *session)
             {
                 buf_printf(&out, "IV_HWADDR=%s\n", format_hex_ex(rgi.hwaddr, 6, 0, 1, ":", &gc));
             }
-            buf_printf(&out, "IV_SSL=%s\n", get_ssl_library_version() );
+            buf_printf(&out, "IV_SSL=%s\n", get_ssl_library_version());
 #if defined(_WIN32)
             buf_printf(&out, "IV_PLAT_VER=%s\n", win32_version_string(&gc, false));
 #endif
