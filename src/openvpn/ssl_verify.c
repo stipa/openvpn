@@ -1554,6 +1554,7 @@ verify_user_pass(struct user_pass *up, struct tls_multi *multi,
      */
     if (session->opt->auth_token_generate && is_auth_token(up->password))
     {
+
         ks->auth_token_state_flags = verify_auth_token(up, multi, session);
         if (session->opt->auth_token_call_auth)
         {
@@ -1682,7 +1683,9 @@ verify_user_pass(struct user_pass *up, struct tls_multi *multi,
          * Otherwise the auth-token get pushed out as part of the "normal"
          * push-reply
          */
-        if (multi->auth_token_initial)
+        bool initial_connect = session->key[KS_PRIMARY].key_id == 0;
+
+        if (multi->auth_token_initial && !initial_connect)
         {
             /*
              * We do not explicitly schedule the sending of the
