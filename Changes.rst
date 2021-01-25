@@ -25,6 +25,16 @@ Certificate pinning/verify peer fingerprint
     fingerprint of the peer. The option takes use a number of allowed
     SHA256 certificate fingerprints.
 
+Deferred auth support for scripts
+    The ``--auth-user-pass-verify`` script supports now deferred authentication.
+
+Pending auth support for plugins and scripts
+    Both auth plugin and script can now signal pending authentication to
+    the client when using deferred authentication. The new ``client-crresponse``
+    script option and ``OPENVPN_PLUGIN_CLIENT_CRRESPONSE`` plugin function can
+    be used to parse a client response to a ``CR_TEXT`` two factor challenge.
+
+    See ``sample/sample-scripts/totpauth.py`` for an example.
 
 Deprecated features
 -------------------
@@ -35,6 +45,7 @@ Deprecated features
 ``verify-hash`` has been deprecated
     This option has very limited usefulness and should be replaced by either
     a better ``--ca`` configuration or with a ``--tls-verify`` script.
+
 
 Overview of changes in 2.5
 ==========================
