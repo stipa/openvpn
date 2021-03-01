@@ -1932,6 +1932,7 @@ tls_session_update_crypto_params_do_work(struct tls_session *session,
     return tls_session_generate_data_channel_keys(session);
 }
 
+
 bool
 tls_session_update_crypto_params(struct tls_session *session,
                                  struct options *options, struct frame *frame,
@@ -3492,7 +3493,7 @@ tls_pre_decrypt(struct tls_multi *multi,
     if (i == TM_SIZE && is_hard_reset_method2(op))
     {
         struct tls_session *session = &multi->session[TM_ACTIVE];
-        struct key_state *ks = &session->key[KS_PRIMARY];
+        const struct key_state *ks = get_primary_key(multi);
 
         /*
          * If we have no session currently in progress, the initial packet will
@@ -3977,7 +3978,6 @@ tls_send_payload(struct tls_multi *multi,
                  const uint8_t *data,
                  int size)
 {
-    struct tls_session *session;
     struct key_state *ks;
     bool ret = false;
 
@@ -3985,8 +3985,7 @@ tls_send_payload(struct tls_multi *multi,
 
     ASSERT(multi);
 
-    session = &multi->session[TM_ACTIVE];
-    ks = &session->key[KS_PRIMARY];
+    ks = get_key_scan(multi, 0);
 
     if (ks->state >= S_ACTIVE)
     {
@@ -4015,16 +4014,13 @@ bool
 tls_rec_payload(struct tls_multi *multi,
                 struct buffer *buf)
 {
-    struct tls_session *session;
-    struct key_state *ks;
     bool ret = false;
 
     tls_clear_error();
 
     ASSERT(multi);
 
-    session = &multi->session[TM_ACTIVE];
-    ks = &session->key[KS_PRIMARY];
+    struct key_state *ks = get_key_scan(multi, 0);
 
     if (ks->state >= S_ACTIVE && BLEN(&ks->plaintext_read_buf))
     {
