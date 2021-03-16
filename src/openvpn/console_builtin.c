@@ -78,7 +78,7 @@ get_console_input_win32(const char *prompt, const bool echo, char *input, const 
     if (in != INVALID_HANDLE_VALUE
         && err != INVALID_HANDLE_VALUE
         && !win32_service_interrupt(&win32_signal)
-        && WriteFile(err, prompt, strlen(prompt), &len, NULL))
+        && WriteFile(err, prompt, (DWORD)strlen(prompt), &len, NULL))
     {
         bool is_console = (GetFileType(in) == FILE_TYPE_CHAR);
         DWORD flags_save = 0;
