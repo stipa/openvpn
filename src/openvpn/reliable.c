@@ -41,6 +41,8 @@
 
 #include "memdbg.h"
 
+#define N_ACK_RETRANSMIT 3
+
 /*
  * verify that test - base < extent while allowing for base or test wraparound
  */
@@ -382,7 +384,10 @@ reliable_send_purge(struct reliable *rel, const struct reliable_ack *ack)
                 }
 #endif
                 e->active = false;
-                break;
+            }
+            else if (e->active && e->packet_id < pid)
+            {
+                e->n_acks++;
             }
         }
     }
@@ -555,7 +560,7 @@ reliable_can_send(const struct reliable *rel)
         if (e->active)
         {
             ++n_active;
-            if (now >= e->next_try)
+            if (now >= e->next_try || e->n_acks >= N_ACK_RETRANSMIT)
             {
                 ++n_current;
             }
@@ -581,7 +586,8 @@ reliable_send(struct reliable *rel, int *opcode)
     for (i = 0; i < rel->size; ++i)
     {
         struct reliable_entry *e = &rel->array[i];
-        if (e->active && local_now >= e->next_try)
+        if (e->active
+            && (e->n_acks >= N_ACK_RETRANSMIT || local_now >= e->next_try))
         {
             if (!best || reliable_pid_min(e->packet_id, best->packet_id))
             {
@@ -599,6 +605,7 @@ reliable_send(struct reliable *rel, int *opcode)
         /* constant timeout, no backoff */
         best->next_try = local_now + best->timeout;
 #endif
+        best->n_acks = 0;
         *opcode = best->opcode;
         dmsg(D_REL_DEBUG, "ACK reliable_send ID " packet_id_format " (size=%d to=%d)",
              (packet_id_print_type)best->packet_id, best->buf.len,
@@ -686,6 +693,7 @@ reliable_mark_active_incoming(struct reliable *rel, struct buffer *buf,
             e->opcode = opcode;
             e->next_try = 0;
             e->timeout = 0;
+            e->n_acks = 0;
             dmsg(D_REL_DEBUG, "ACK mark active incoming ID " packet_id_format, (packet_id_print_type)e->packet_id);
             return;
         }

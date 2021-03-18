@@ -72,6 +72,8 @@ struct reliable_entry
     interval_t timeout;
     time_t next_try;
     packet_id_type packet_id;
+    /** Number of acks received */
+    size_t n_acks;
     int opcode;
     struct buffer buf;
 };
