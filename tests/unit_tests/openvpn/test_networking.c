@@ -6,7 +6,7 @@
 #include "mock_msg.h"
 
 
-static char *iface = "dummy0";
+static char *iface = "ovpn-dummy0";
 
 static int
 net__iface_up(bool up)
