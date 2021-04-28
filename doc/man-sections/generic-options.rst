@@ -52,6 +52,27 @@ which mode OpenVPN is configured as.
   BSDs implement a getrandom() or getentropy() syscall that removes the
   need for /dev/urandom to be available.
 
+--compat-mode version
+  This option provides a way to alter the default of OpenVPN to be more
+  compatible with the version ``version`` specified. All of the changes
+  this option does can also be achieved using invdivdiual configuration
+  option.
+
+  Note: Using this options sets reverts defaults to no longer recommended
+  values and should be avoided if possible.
+
+  The following table details what defaults are changed depending on the
+  version specified.
+
+  - 2.5.x or lower: ``--allow-compression asym`` is automatically added
+    to the configuration if no other compression options are present.
+  - 2.4.x or lower: The cipher in ``--cipher`` is appended to
+    ``--data-ciphers``
+  - 2.3.x or lower: ``--data-cipher-fallback`` is automatically added with
+    the same cipher as ``--cipher``
+  - 2.3.6 or lower: ``--tls-version-min 1.0`` is added to the configuration
+    when ``--tls-version-min`` is not explicitly set.
+
 --config file
   Load additional config options from ``file`` where each line corresponds
   to one command line option, but with the leading '--' removed.

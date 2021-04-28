@@ -858,6 +858,7 @@ init_options(struct options *o, const bool init_gc)
     o->use_prediction_resistance = false;
 #endif
     o->tls_timeout = 2;
+    o->ssl_flags = (TLS_VER_1_2 << SSLF_TLS_VERSION_MIN_SHIFT);
     o->renegotiate_bytes = -1;
     o->renegotiate_seconds = 3600;
     o->renegotiate_seconds_min = -1;
@@ -3111,22 +3112,10 @@ options_postprocess_cipher(struct options *o)
     else if (!o->enable_ncp_fallback
              && !tls_item_in_cipher_list(o->ciphername, o->ncp_ciphers))
     {
-        msg(M_WARN, "DEPRECATED OPTION: --cipher set to '%s' but missing in"
-            " --data-ciphers (%s). Future OpenVPN version will "
-            "ignore --cipher for cipher negotiations. "
-            "Add '%s' to --data-ciphers or change --cipher '%s' to "
-            "--data-ciphers-fallback '%s' to silence this warning.",
-            o->ciphername, o->ncp_ciphers, o->ciphername,
-            o->ciphername, o->ciphername);
-        o->enable_ncp_fallback = true;
-
-        /* Append the --cipher to ncp_ciphers to allow it in NCP */
-        size_t newlen = strlen(o->ncp_ciphers) + 1 + strlen(o->ciphername) + 1;
-        char *ncp_ciphers = gc_malloc(newlen, false, &o->gc);
-
-        ASSERT(openvpn_snprintf(ncp_ciphers, newlen, "%s:%s", o->ncp_ciphers,
-                                o->ciphername));
-        o->ncp_ciphers = ncp_ciphers;
+        msg(M_WARN, "DEPRECATED OPTION: --cipher set to '%s' but missing in "
+            "--data-ciphers (%s). OpenVPN ignores --cipher for cipher "
+            "negotiations. ",
+            o->ciphername, o->ncp_ciphers);
     }
 }
 
@@ -3270,6 +3259,55 @@ bool check_option_conflict_dco(int msglevel, const struct options *o)
 }
 #endif /* if defined(TARGET_LINUX) */
 
+
+static void
+options_set_backwards_compatible_options(struct options *o)
+{
+    /* TLS min version is not set */
+    if ((o->ssl_flags & SSLF_TLS_VERSION_MIN_MASK) == 0)
+    {
+        if (!need_compatibility(o, 203070))
+        {
+            /* 2.3.6 and earlier have TLS 1.0 only, set minimum to TLS 1.0 */
+            o->ssl_flags = (TLS_VER_1_0 << SSLF_TLS_VERSION_MIN_SHIFT);
+        }
+        else
+        {
+            /* Use TLS 1.2 as proper default */
+            o->ssl_flags = (TLS_VER_1_2 << SSLF_TLS_VERSION_MIN_SHIFT);
+        }
+    }
+
+    /* Versions < 2.5.0 do need --cipher in the list of accepted ciphers.
+     * Version 2.4 might probably does not need it but NCP was not so
+     * good with 2.4 and ncp-disable might be more common on 2.4 peers.
+     * Only do this iif --cipher is not explicitly (BF-CBC). This is not
+     * 100% correct backwards compatible behaviour but 2.5 already behaved like
+     * this */
+    if (o->ciphername && need_compatibility(o, 205000)
+        && !tls_item_in_cipher_list(o->ciphername, o->ncp_ciphers))
+    {
+        append_cipher_to_ncp_list(o, o->ciphername);
+    }
+
+    /* Versions <= 2.3.0 additionally might be compiled with --enable-small and
+     * not have OCC strings required for "poor man's NCP" */
+    if (o->ciphername &&  need_compatibility(o, 204000))
+    {
+        o->enable_ncp_fallback = true;
+    }
+
+    /* Compression is deprecated and we do not want to announce support for it
+     * by default anymore, additionally DCO breaks with with compression.
+     * Disable compression by default starting with 2.6.0 if no other
+     * compression related options have been explicitly set */
+    if (!comp_non_stub_enabled(&o->comp) && !need_compatibility(o, 206000)
+        && (o->comp.flags == 0))
+    {
+        o->comp.flags = COMP_F_ALLOW_STUB_ONLY|COMP_F_ADVERTISE_STUBS_ONLY;
+    }
+}
+
 static void
 options_postprocess_mutate(struct options *o)
 {
@@ -3281,6 +3319,8 @@ options_postprocess_mutate(struct options *o)
     helper_client_server(o);
     helper_keepalive(o);
     helper_tcp_nodelay(o);
+
+    options_set_backwards_compatible_options(o);
 
     options_postprocess_cipher(o);
     options_postprocess_mutate_invariant(o);
@@ -6867,6 +6907,17 @@ add_option(struct options *options,
             setenv_str(es, p[1], p[2] ? p[2] : "");
         }
     }
+    else if (streq(p[0], "compat-mode") && p[1] && !p[3])
+    {
+        unsigned int major, minor, patch;
+        if (!(sscanf(p[1], "%u.%u.%u", &major, &minor, &patch) == 3))
+        {
+            msg(msglevel, "cannot parse version number for -compat-mode: %s", p[1]);
+            goto err;
+        }
+
+        options->backwards_compatible = major * 10000 + minor * 100 + patch;
+    }
     else if (streq(p[0], "setenv-safe") && p[1] && !p[3])
     {
         VERIFY_PERMISSION(OPT_P_SETENV);
@@ -7874,6 +7925,7 @@ add_option(struct options *options,
         else if (streq(p[1], "asym"))
         {
             options->comp.flags &= ~COMP_F_ALLOW_COMPRESS;
+            options->comp.flags |= COMP_F_ALLOW_ASYM;
         }
         else if (streq(p[1], "yes"))
         {

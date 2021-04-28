@@ -53,6 +53,11 @@ Data channel offloading with ovpn-dco
     kernel module. The userspace openvpn program acts purely as a control plane
     application.
 
+Compatibility mode (``--compat-mode``)
+    The modernisation of defaults can impact the compatibility of OpenVPN 2.6.0
+    with older peers. The options ``--compat-mode`` allows UIs to provide users
+    an easy way to still connect to older servers.
+
 
 Deprecated features
 -------------------
@@ -73,6 +78,23 @@ Deprecated features
 ``ncp-disable`` has been removed
     This option mainly served a role as debug option when NCP was first
     introduced. It should now no longer be necessary.
+
+TLS 1.0 and 1.1 are deprecated
+    ``tls-version-min`` is set to 1.2 by default.  OpenVPN 2.6.0 defaults
+    to a minimum TLS version of 1.2 as TLS 1.0 and 1.1 should be generally
+    avoided. Note that OpenVPN versions older than 2.3.7 use TLS 1.0 only.
+
+``--cipher`` options is no longer included in ``--data-ciphers`` by default
+    Data cipher negotiation has been introduced in 2.4.0 and been significantly
+    improved in 2.5.0. The implicit fallback to the cipher specified in
+    ``--cipher`` has been removed.
+
+Compression no longer enabled by default
+    Unless an explicit compression option is specified in the configuration,
+    ``--allow-compression`` defaults to ``no`` in OpeNVPN 2.6.0.
+    OpenVPN 2.5 still allowed by default a server to enable compression by
+    pushing compression related option but only.
+
 
 Overview of changes in 2.5
 ==========================
