@@ -225,6 +225,10 @@ struct options
 
     /* enable forward compatibility for post-2.1 features */
     bool forward_compatible;
+    /** What version we should try to be compatible with as major * 10000 +
+      * minor * 100 + patch, e.g. 2.4.7 => 204070 */
+    unsigned int backwards_compatible;
+
     /* list of options that should be ignored even if unknown */
     const char **ignore_unknown_option;
 
@@ -660,6 +664,19 @@ struct options
     /* data channel crypto flags set by push/pull. Reuses the CO_* crypto_flags */
     unsigned int data_channel_crypto_flags;
 };
+
+/**
+ * Returns if we want 'backwards-compatible' to a certain version
+ * @param version   the first version does that *NOT* need the compatibility
+ *                  e.g. 204000 for all versions <= 2.4.0
+ * @return          compatibility should be enabled.
+ */
+static inline bool
+need_compatibility(const struct options *o, int version)
+{
+    return o->backwards_compatible != 0 && o->backwards_compatible < version;
+}
+
 
 #define streq(x, y) (!strcmp((x), (y)))
 

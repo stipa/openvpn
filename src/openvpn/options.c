@@ -858,6 +858,7 @@ init_options(struct options *o, const bool init_gc)
     o->use_prediction_resistance = false;
 #endif
     o->tls_timeout = 2;
+    o->ssl_flags = (TLS_VER_1_2 << SSLF_TLS_VERSION_MIN_SHIFT);
     o->renegotiate_bytes = -1;
     o->renegotiate_seconds = 3600;
     o->renegotiate_seconds_min = -1;
@@ -5133,6 +5134,16 @@ parse_argv(struct options *options,
     }
 }
 
+static void
+set_backwards_compatible_options(struct options *o)
+{
+    if (need_compatibility(o, 203070))
+    {
+        /* 2.3.6 and earlier have TLS 1.0 only */
+        o->ssl_flags = (TLS_VER_1_0 << SSLF_TLS_VERSION_MIN_SHIFT);
+    }
+}
+
 /**
  * Filter an option line by all pull filters.
  *
@@ -6866,6 +6877,18 @@ add_option(struct options *options,
             }
             setenv_str(es, p[1], p[2] ? p[2] : "");
         }
+    }
+    else if (streq(p[0], "compat-mode") && p[1] && !p[3])
+    {
+        unsigned int major, minor, patch;
+        if (!(sscanf(p[1], "%u.%u.%u", &major, &minor, &patch) == 3))
+        {
+            msg(msglevel, "cannot parse version number for -compat-mode: %s", p[1]);
+            goto err;
+        }
+
+        options->backwards_compatible = major * 10000 + minor * 100 + patch;
+        set_backwards_compatible_options(options);
     }
     else if (streq(p[0], "setenv-safe") && p[1] && !p[3])
     {
