@@ -421,6 +421,11 @@ FindSystemInfo(_In_ MSIHANDLE hInstall)
         TEXT("Wintun") TEXT("\0"),
         TEXT("WINTUNADAPTERS"),
         TEXT("ACTIVEWINTUNADAPTERS"));
+    find_adapters(
+        hInstall,
+        TEXT("ovpn-dco") TEXT("\0"),
+        TEXT("OVPNDCOAPTERS"),
+        TEXT("ACTIVEOVPNDCOADAPTERS"));
 
     if (bIsCoInitialized)
     {
