@@ -897,14 +897,14 @@ dnl
 		;;
 
 		*-mingw*)
-			DCO_CFLAGS="-I${DCO_SOURCEDIR}"
+			DCO_CFLAGS="-I${DCO_SOURCEDIR}/uapi"
 
 			saved_CFLAGS="${CFLAGS}"
 			CFLAGS="${CFLAGS} ${DCO_CFLAGS}"
 			AC_CHECK_HEADERS(
-				[uapi.h],
+				[ovpn-dco.h],
 				,
-				[AC_MSG_ERROR([uapi.h is missing (use DCO_SOURCE to set path to it, CFLAGS=${CFLAGS})])]
+				[AC_MSG_ERROR([ovpn-dco.h is missing (use DCO_SOURCE to set path to it, CFLAGS=${CFLAGS})])]
 			)
 			CFLAGS=${saved_CFLAGS}
 

@@ -22,7 +22,7 @@
 #ifndef OPENVPN_NETWORKING_WINDCO_H
 #define OPENVPN_NETWORKING_WINDCO_H
 #if defined(ENABLE_WINDCO)
-#include "uapi.h"
+#include "ovpn-dco.h"
 #include "buffer.h"
 
 
