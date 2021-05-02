@@ -30,7 +30,11 @@
 #include "syshead.h"
 
 #include <stdio.h>
+
+#ifdef HAVE_UNISTD_H
 #include <unistd.h>
+#endif
+
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
