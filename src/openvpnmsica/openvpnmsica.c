@@ -43,6 +43,10 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <tchar.h>
+#include <setupapi.h>
+#include <newdev.h>
+#include <initguid.h>
+#include <devguid.h>
 
 #ifdef _MSC_VER
 #pragma comment(lib, "advapi32.lib")
@@ -60,6 +64,12 @@
 #define MSICA_ADAPTER_TICK_SIZE (16*1024) /** Amount of tick space to reserve for one TAP/TUN adapter creation/deletition. */
 
 #define FILE_NEED_REBOOT        L".ovpn_need_reboot"
+#define CMP_OVPN_DCO_INF_GUID   L"{4BE20469-2292-4AE2-B953-49AA0DA4165E}"
+#define ACTION_ADD_DRIVER       L"AddDriver"
+#define ACTION_DELETE_DRIVER    L"DeleteDriver"
+#define ACTION_NOOP             L"Noop"
+#define FILE_OVPN_DCO_INF       L"ovpn-dco.inf"
+#define OVPN_DCO_HWID           L"ovpn-dco"
 
 /**
  * Joins an argument sequence and sets it to the MSI property.
@@ -422,6 +432,11 @@ FindSystemInfo(_In_ MSIHANDLE hInstall)
         TEXT("Wintun") TEXT("\0"),
         TEXT("WINTUNADAPTERS"),
         TEXT("ACTIVEWINTUNADAPTERS"));
+    find_adapters(
+        hInstall,
+        TEXT("ovpn-dco") TEXT("\0"),
+        TEXT("OVPNDCOAPTERS"),
+        TEXT("ACTIVEOVPNDCOADAPTERS"));
 
     if (bIsCoInitialized)
     {
@@ -1289,6 +1304,339 @@ CheckAndScheduleReboot(_In_ MSIHANDLE hInstall)
         MsiSetMode(hInstall, MSIRUNMODE_REBOOTATEND, TRUE);
     }
 
+    if (bIsCoInitialized)
+    {
+        CoUninitialize();
+    }
+    return ret;
+}
+
+static BOOL
+IsInstalling(_In_ INSTALLSTATE InstallState, _In_ INSTALLSTATE ActionState)
+{
+    return INSTALLSTATE_LOCAL == ActionState || INSTALLSTATE_SOURCE == ActionState ||
+        (INSTALLSTATE_DEFAULT == ActionState &&
+            (INSTALLSTATE_LOCAL == InstallState || INSTALLSTATE_SOURCE == InstallState));
+}
+
+static BOOL
+IsReInstalling(_In_ INSTALLSTATE InstallState, _In_ INSTALLSTATE ActionState)
+{
+    return (INSTALLSTATE_LOCAL == ActionState || INSTALLSTATE_SOURCE == ActionState ||
+        INSTALLSTATE_DEFAULT == ActionState) &&
+        (INSTALLSTATE_LOCAL == InstallState || INSTALLSTATE_SOURCE == InstallState);
+}
+
+static BOOL
+IsUninstalling(_In_ INSTALLSTATE InstallState, _In_ INSTALLSTATE ActionState)
+{
+    return (INSTALLSTATE_ABSENT == ActionState || INSTALLSTATE_REMOVED == ActionState) &&
+        (INSTALLSTATE_LOCAL == InstallState || INSTALLSTATE_SOURCE == InstallState);
+}
+
+static UINT
+GetComponentNameById(_In_ MSIHANDLE hInstall, _In_ LPCTSTR componentId, _Out_ LPTSTR name, DWORD len)
+{
+    UINT ret = 0;
+    MSIHANDLE record = 0;
+    MSIHANDLE view = 0;
+
+    name[len - 1] = '\0';
+
+    /* Open MSI database. */
+    MSIHANDLE db = MsiGetActiveDatabase(hInstall);
+    if (db == 0)
+    {
+        msg(M_NONFATAL, "%s: MsiGetActiveDatabase failed", __FUNCTION__);
+        ret = ERROR_INVALID_HANDLE;
+        goto cleanup;
+    }
+
+    TCHAR cmd[0x400];
+    _stprintf_s(cmd, _countof(cmd), L"SELECT `Component` FROM `Component` WHERE `ComponentId` = '%s'", componentId);
+
+    ret = MsiDatabaseOpenView(db, cmd, &view);
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    ret = MsiViewExecute(view, 0);
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    ret = MsiViewFetch(view, &record);
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    ret = MsiRecordGetString(record, 1, name, &len);
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+cleanup:
+    MsiCloseHandle(view);
+    MsiCloseHandle(record);
+    MsiCloseHandle(db);
+
+    return ret;
+}
+
+UINT __stdcall
+EvaluateDriver(_In_ MSIHANDLE hInstall)
+{
+#ifdef _MSC_VER
+#pragma comment(linker, DLLEXP_EXPORT)
+#endif
+
+    debug_popup(TEXT(__FUNCTION__));
+
+    UINT ret;
+    BOOL bIsCoInitialized = SUCCEEDED(CoInitialize(NULL));
+
+    OPENVPNMSICA_SAVE_MSI_SESSION(hInstall);
+
+    WCHAR componentName[0x400];
+    ret = GetComponentNameById(hInstall, CMP_OVPN_DCO_INF_GUID, componentName, _countof(componentName));
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    INSTALLSTATE InstallState, ActionState;
+    ret = MsiGetComponentState(hInstall, componentName, &InstallState, &ActionState);
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    /* get user-specific temp path, to where we create reboot indication file */
+    WCHAR tempPath[MAX_PATH];
+    GetTempPath(MAX_PATH, tempPath);
+
+    WCHAR pathToInf[MAX_PATH];
+    DWORD pathLen = _countof(pathToInf);
+    ret = MsiGetProperty(hInstall, L"OVPNDCO", pathToInf, &pathLen);
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    TCHAR action[0x400];
+    if ((IsReInstalling(InstallState, ActionState) || IsInstalling(InstallState, ActionState)))
+    {
+        _stprintf_s(action, _countof(action), L"%s|%s%s|%s", ACTION_ADD_DRIVER, pathToInf, FILE_OVPN_DCO_INF, tempPath);
+    }
+    else if (IsUninstalling(InstallState, ActionState))
+    {
+        _stprintf_s(action, _countof(action), L"%s|%s%s|%s", ACTION_DELETE_DRIVER, pathToInf, FILE_OVPN_DCO_INF, tempPath);
+    }
+    else
+    {
+        _stprintf_s(action, _countof(action), L"%s||", ACTION_NOOP);
+    }
+
+    ret = MsiSetProperty(hInstall, L"OvpnDcoProcess", action);
+
+cleanup:
+    if (bIsCoInitialized)
+    {
+        CoUninitialize();
+    }
+    return ret;
+}
+
+static BOOL
+GetPublishedDriverName(_In_z_ LPCWSTR hwid, _Out_writes_z_(len) LPWSTR publishedName, _In_ DWORD len)
+{
+    wcscpy_s(publishedName, len, L"");
+
+    HDEVINFO devInfoSet = SetupDiGetClassDevs(&GUID_DEVCLASS_NET, NULL, NULL, 0);
+    if (!devInfoSet)
+    {
+        return FALSE;
+    }
+    BOOL res = FALSE;
+    if (!SetupDiBuildDriverInfoList(devInfoSet, NULL, SPDIT_CLASSDRIVER))
+    {
+        goto cleanupDeviceInfoSet;
+    }
+    for (DWORD idx = 0;; ++idx)
+    {
+        SP_DRVINFO_DATA drvInfo = { .cbSize = sizeof(drvInfo) };
+        if (!SetupDiEnumDriverInfo(devInfoSet, NULL, SPDIT_CLASSDRIVER, idx, &drvInfo))
+        {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+            {
+                break;
+            }
+            goto cleanupDriverInfoList;
+        }
+        DWORD size;
+        if (SetupDiGetDriverInfoDetail(devInfoSet, NULL, &drvInfo, NULL, 0, &size) || GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+        {
+            goto cleanupDriverInfoList;
+        }
+        PSP_DRVINFO_DETAIL_DATA drvDetails = calloc(1, size);
+        if (!drvDetails)
+        {
+            goto cleanupDriverInfoList;
+        }
+        drvDetails->cbSize = sizeof(*drvDetails);
+        if (!SetupDiGetDriverInfoDetail(devInfoSet, NULL, &drvInfo, drvDetails, size, &size))
+        {
+            free(drvDetails);
+            goto cleanupDriverInfoList;
+        }
+        if (_tcscmp(hwid, drvDetails->HardwareID) == 0)
+        {
+            PathStripPath(drvDetails->InfFileName);
+            _tcscpy_s(publishedName, len, drvDetails->InfFileName);
+            res = TRUE;
+            break;
+        }
+        free(drvDetails);
+    }
+
+cleanupDriverInfoList:
+    SetupDiDestroyDriverInfoList(devInfoSet, NULL, SPDIT_CLASSDRIVER);
+cleanupDeviceInfoSet:
+    SetupDiDestroyDeviceInfoList(devInfoSet);
+    return res;
+}
+
+static void
+DeleteDriver(_In_z_ LPCWSTR pathToTmp)
+{
+    /* get list of adapters for hwid */
+    struct tap_adapter_node* pAdapterList = NULL;
+    DWORD ret = tap_list_adapters(NULL, OVPN_DCO_HWID, &pAdapterList);
+    if (ret != ERROR_SUCCESS)
+    {
+        msg(M_NONFATAL, "%s", "Failed to get adapter list: %d", __FUNCTION__, ret);
+    }
+
+    /* delete all adapters */
+    BOOL rebootRequired = FALSE;
+    for (struct tap_adapter_node* pAdapter = pAdapterList; pAdapter != NULL; pAdapter = pAdapter->pNext)
+    {
+        BOOL rebootForOneAdapter = FALSE;
+        tap_delete_adapter(NULL, &pAdapter->guid, &rebootForOneAdapter);
+        rebootRequired |= rebootForOneAdapter;
+    }
+
+    /* delete driver */
+    WCHAR publishedName[MAX_PATH] = { 0 };
+    if (GetPublishedDriverName(OVPN_DCO_HWID, publishedName, _countof(publishedName)))
+    {
+        if (!SetupUninstallOEMInf(publishedName, 0, NULL))
+        {
+            msg(M_NONFATAL | M_ERRNO, "%s: SetupUninstallOEMInf(\"%" PRIsLPTSTR "\") failed", __FUNCTION__, publishedName);
+        }
+    }
+    else
+    {
+        msg(M_NONFATAL | M_ERRNO, "%s: GetPublishedDriverName(\"%" PRIsLPTSTR "\") failed", __FUNCTION__, OVPN_DCO_HWID);
+    }
+
+    if (rebootRequired)
+    {
+        CreateRebootFile(pathToTmp);
+    }
+
+    ret = ERROR_SUCCESS;
+}
+
+static UINT
+AddDriver(_In_z_ LPCWSTR pathToInf, _In_z_ LPCWSTR pathToTmp)
+{
+    /* copy driver to driver store */
+    if (!SetupCopyOEMInf(pathToInf, NULL, SPOST_PATH, 0, NULL, 0, NULL, NULL))
+    {
+        msg(M_NONFATAL | M_ERRNO, "%s: SetupCopyOEMInf(\"%" PRIsLPTSTR "\") failed", __FUNCTION__, pathToInf);
+        return GetLastError();
+    }
+
+    /* update driver for existing devices (if any) */
+    BOOL rebootRequired = FALSE;
+    if (!UpdateDriverForPlugAndPlayDevices(NULL, OVPN_DCO_HWID, pathToInf, INSTALLFLAG_NONINTERACTIVE | INSTALLFLAG_FORCE, &rebootRequired))
+    {
+        /* ERROR_NO_SUCH_DEVINST means that no devices exist, which is normal case - device (adapter) is created at later stage */
+        if (GetLastError() != ERROR_NO_SUCH_DEVINST)
+        {
+            msg(M_NONFATAL | M_ERRNO, "%s: UpdateDriverForPlugAndPlayDevices(\"%" PRIsLPTSTR "\", \"%" PRIsLPTSTR "\") failed", __FUNCTION__, OVPN_DCO_HWID, pathToInf);
+            return GetLastError();
+        }
+    }
+    if (rebootRequired)
+    {
+        CreateRebootFile(pathToTmp);
+    }
+
+    return ERROR_SUCCESS;
+}
+
+UINT __stdcall
+ProcessDriver(_In_ MSIHANDLE hInstall)
+{
+#ifdef _MSC_VER
+#pragma comment(linker, DLLEXP_EXPORT)
+#endif
+
+    debug_popup(TEXT(__FUNCTION__));
+
+    UINT ret = 0;
+    BOOL bIsCoInitialized = SUCCEEDED(CoInitialize(NULL));
+
+    OPENVPNMSICA_SAVE_MSI_SESSION(hInstall);
+
+    LPTSTR customData = NULL;
+    ret = msi_get_string(hInstall, L"CustomActionData", &customData);
+    if (ret != ERROR_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    int i = 0;
+    WCHAR action[0x400] = { 0 };
+    WCHAR pathToInf[MAX_PATH] = { 0 };
+    WCHAR pathToTmp[MAX_PATH] = { 0 };
+
+    WCHAR* pos = NULL;
+    WCHAR* token = wcstok_s(customData, L"|", &pos);
+    /* action|path_to_inf_file|path_to_tmp_dir */
+    while (token)
+    {
+        switch (i++)
+        {
+        case 0:
+            wcscpy_s(action, _countof(action), token);
+            break;
+        case 1:
+            wcscpy_s(pathToInf, _countof(pathToInf), token);
+            break;
+        case 2:
+            wcscpy_s(pathToTmp, _countof(pathToTmp), token);
+            break;
+        }
+        token = wcstok_s(NULL, L"|", &pos);
+    }
+
+    if (wcscmp(action, ACTION_ADD_DRIVER) == 0)
+    {
+        AddDriver(pathToInf, pathToTmp);
+    }
+    else if (wcscmp(action, ACTION_DELETE_DRIVER) == 0)
+    {
+        DeleteDriver(pathToTmp);
+    }
+
+cleanup:
     if (bIsCoInitialized)
     {
         CoUninitialize();
