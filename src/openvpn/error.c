@@ -490,25 +490,6 @@ close_syslog(void)
 #endif
 }
 
-#ifdef _WIN32
-
-static HANDLE orig_stderr;
-
-HANDLE
-get_orig_stderr(void)
-{
-    if (orig_stderr)
-    {
-        return orig_stderr;
-    }
-    else
-    {
-        return GetStdHandle(STD_ERROR_HANDLE);
-    }
-}
-
-#endif
-
 void
 redirect_stdout_stderr(const char *file, bool append)
 {
@@ -548,18 +529,6 @@ redirect_stdout_stderr(const char *file, bool append)
                 msg(M_ERR, "Error: cannot seek to end of --log file: %s", file);
             }
         }
-
-        /* save original stderr for password prompts */
-        orig_stderr = GetStdHandle(STD_ERROR_HANDLE);
-
-#if 0 /* seems not be necessary with stdout/stderr redirection below*/
-        /* set up for redirection */
-        if (!SetStdHandle(STD_OUTPUT_HANDLE, log_handle)
-            || !SetStdHandle(STD_ERROR_HANDLE, log_handle))
-        {
-            msg(M_ERR, "Error: cannot redirect stdout/stderr to --log file: %s", file);
-        }
-#endif
 
         /* direct stdout/stderr to point to log_handle */
         log_fd = _open_osfhandle((intptr_t)log_handle, _O_TEXT);

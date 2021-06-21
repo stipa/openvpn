@@ -255,12 +255,6 @@ void close_syslog(void);
 /* log file output */
 void redirect_stdout_stderr(const char *file, bool append);
 
-#ifdef _WIN32
-/* get original stderr handle, even if redirected by --log/--log-append */
-HANDLE get_orig_stderr(void);
-
-#endif
-
 /* exit program */
 void openvpn_exit(const int status);
 
