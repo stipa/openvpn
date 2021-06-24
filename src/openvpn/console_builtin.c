@@ -62,23 +62,19 @@
 static bool
 get_console_input_win32(const char *prompt, const bool echo, char *input, const int capacity)
 {
-    HANDLE in = INVALID_HANDLE_VALUE;
-    HANDLE err = INVALID_HANDLE_VALUE;
-    DWORD len = 0;
-
     ASSERT(prompt);
     ASSERT(input);
     ASSERT(capacity > 0);
 
     input[0] = '\0';
 
-    in = GetStdHandle(STD_INPUT_HANDLE);
-    err = get_orig_stderr();
+    HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+    int err = get_orig_stderr();
 
     if (in != INVALID_HANDLE_VALUE
-        && err != INVALID_HANDLE_VALUE
+        && err != -1
         && !win32_service_interrupt(&win32_signal)
-        && WriteFile(err, prompt, strlen(prompt), &len, NULL))
+        && (_write(err, prompt, strlen(prompt)) != -1))
     {
         bool is_console = (GetFileType(in) == FILE_TYPE_CHAR);
         DWORD flags_save = 0;
@@ -102,6 +98,8 @@ get_console_input_win32(const char *prompt, const bool echo, char *input, const 
             }
         }
 
+        DWORD len = 0;
+
         if (is_console)
         {
             winput = malloc(capacity * sizeof(WCHAR));
@@ -124,7 +122,7 @@ get_console_input_win32(const char *prompt, const bool echo, char *input, const 
 
         if (!echo)
         {
-            WriteFile(err, "\r\n", 2, &len, NULL);
+            _write(err, "\r\n", 2);
         }
         if (is_console)
         {
