@@ -211,7 +211,7 @@ jobs:
         with:
           vcpkgArguments: 'openssl lz4 lzo pkcs11-helper tap-windows6'
           vcpkgTriplet: '${{ matrix.triplet }}-windows-ovpn'
-          vcpkgGitCommitId: '7d472dd25830da92108eb76642c667aaa40512cb'
+          vcpkgGitCommitId: 'b361c2eefa3966cb7cec45275aff32e90430aaa6'
           cleanAfterBuild: false
 
       - name: Build
